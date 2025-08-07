@@ -6,7 +6,9 @@ RUN apk add --no-cache ffmpeg python3 make g++
 RUN ln -sf python3 /usr/bin/python
 
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci --only=production
+
+RUN ls node_modules/fs-extra && echo "fs-extra installed"
 
 COPY . .
 
