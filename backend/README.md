@@ -1,4 +1,4 @@
-# Media Streaming Application
+# OpenWav - Backend
 
 A comprehensive Node.js backend application for media streaming with yt-dlp integration, user authentication, admin controls, and concurrent download management.
 
