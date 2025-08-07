@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Download Progress Test</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .download-item { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .status-queued { border-left: 5px solid #FFA500; }
+        .status-started { border-left: 5px solid #2196F3; }
+        .status-progress { border-left: 5px solid #2196F3; }
+        .status-completed { border-left: 5px solid #4CAF50; }
+        .status-failed { border-left: 5px solid #f44336; }
+        .status-cancelled { border-left: 5px solid #9E9E9E; }
+        .status-stalled { border-left: 5px solid #FF9800; }
+    </style>
+</head>
+<body>
+    <h1>Download Progress Monitor</h1>
+    <div id="connection-status">Connecting...</div>
+    <div id="downloads"></div>
+
+    <script>
+        // Check if Socket.IO is loaded
+        if (typeof io === 'undefined') {
+            console.error('❌ Socket.IO client library not loaded!');
+            document.getElementById('connection-status').innerHTML = '❌ Socket.IO not loaded - Check server setup';
+            document.getElementById('connection-status').style.color = 'red';
+        } else {
+            console.log('✅ Socket.IO client library loaded');
+            
+            const socket = io();
+            const downloadsDiv = document.getElementById('downloads');
+            const statusDiv = document.getElementById('connection-status');
+
+            // Track connection status
+            socket.on('connect', () => {
+                console.log('✅ Connected to server:', socket.id);
+                statusDiv.innerHTML = `✅ Connected (ID: ${socket.id})`;
+                statusDiv.style.color = 'green';
+            });
+
+            socket.on('disconnect', () => {
+                console.log('❌ Disconnected from server');
+                statusDiv.innerHTML = '❌ Disconnected';
+                statusDiv.style.color = 'red';
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('❌ Connection error:', error);
+                statusDiv.innerHTML = '❌ Connection Error: ' + error.message;
+                statusDiv.style.color = 'red';
+            });
+
+            // Listen for download progress updates
+            socket.on('downloadProgress', (data) => {
+                console.log('📊 Download progress:', data);
+                updateDownloadDisplay(data);
+            });
+
+            function updateDownloadDisplay(data) {
+                let existing = document.getElementById(`task-${data.taskId}`);
+                
+                if (!existing) {
+                    existing = document.createElement('div');
+                    existing.id = `task-${data.taskId}`;
+                    existing.className = 'download-item';
+                    downloadsDiv.appendChild(existing);
+                }
+                
+                // Update CSS class based on status
+                existing.className = `download-item status-${data.status}`;
+                
+                const progressPercent = data.progress || 0;
+                
+                existing.innerHTML = `
+                    <h3>📱 Task: ${data.taskId}</h3>
+                    <p><strong>Title:</strong> ${data.title || 'Loading...'}</p>
+                    <p><strong>Status:</strong> ${data.status.toUpperCase()}</p>
+                    <p><strong>Job ID:</strong> ${data.jobId}</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progressPercent}%"></div>
+                    </div>
+                    <p><strong>Progress:</strong> ${progressPercent}%</p>
+                    <p><strong>Time:</strong> ${new Date(data.timestamp).toLocaleTimeString()}</p>
+                    ${data.error ? `<p style="color: red"><strong>Error:</strong> ${data.error}</p>` : ''}
+                `;
+            }
+
+            // Test connection
+            console.log('🔗 Attempting to connect to Socket.IO server...');
+        }
+    </script>
+</body>
+</html>
