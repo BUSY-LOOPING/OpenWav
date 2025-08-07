@@ -25,9 +25,12 @@ services:
     volumes:
       - ./frontend:/app
     ports:
-      - "3000:3000"   
+      - "3000:3000"  
+    environment:
+      - NODE_ENV=development 
     depends_on:
       - backend
+
 
   postgres:
     image: postgres:15-alpine

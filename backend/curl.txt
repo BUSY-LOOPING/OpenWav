@@ -2,7 +2,11 @@ curl -X POST http://localhost:3000/api/v1/auth/register -H "Content-Type: applic
 {"success":true,"message":"User registered successfully","data":{"user":{"id":"af30adb0-6acb-4d38-a37a-3b441b2e3a34","username":"AdminUser","email":"admin@example.com","role":"admin","createdAt":"2025-08-06T17:20:45.457Z"},"tokens":{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NTEwNTY0NX0.vRyZu-YQZdfEzo0fnwMhMB_BlabN50yKf1MBkBtKJBQ"}}}
 
 
-curl -X GET http://localhost:3000/api/v1/auth/profile -H "Authorization:Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3ODJlMGE0Ny0zMWRjLTQ3ZTEtODU3Yi0yNjlkZmNlZjZiMDciLCJpYXQiOjE3NTM5MTU0MzksImV4cCI6MTc1NDAwMTgzOX0.N-ObyVQ6kPsMC80Wcv-gOkl3jKywvG2ad8y1DJaKTls"
+C:\Users\dhruv>curl -X POST http://localhost:3000/api/v1/auth/register -H "Content-Type: application/json" -d "{\"email\":\"test@test.com\",\"password\":\"Password@123\",\"username\":\"User1\"}"
+{"success":true,"message":"User registered successfully","data":{"user":{"id":"b47a69cc-470b-465c-8a26-01f09485890a","username":"User1","email":"test@test.com","role":"user","createdAt":"2025-08-07T17:37:11.434Z"},"tokens":{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNDdhNjljYy00NzBiLTQ2NWMtOGEyNi0wMWYwOTQ4NTg5MGEiLCJpYXQiOjE3NTQ1ODgyMzEsImV4cCI6MTc1NDY3NDYzMX0.92lxIGi7P_xQ1TwLPXmQ91i0rk3C9mpbT9auv3Tl-Mc","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNDdhNjljYy00NzBiLTQ2NWMtOGEyNi0wMWYwOTQ4NTg5MGEiLCJpYXQiOjE3NTQ1ODgyMzEsImV4cCI6MTc1NTE5MzAzMX0.PXvYl6qZJeIv0pe6RaRthppVqWeof1neqlE7hELLC1M"}}}
+
+
+curl -X GET http://localhost:3000/api/v1/auth/profile -H "Authorization:Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo"
 
 curl -X POST http://localhost:3000/api/v1/downloads -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo" -d "{\"url\":\"https://music.youtube.com/watch?v=p8_ugAjWI5I\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
@@ -16,3 +20,6 @@ curl -X POST http://localhost:3000/api/v1/youtube/auto-download -H "Content-Type
 curl -X POST http://localhost:3000/api/v1/charts/import/hot-100 -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
 curl -X GET "http://localhost:3000/api/v1/charts/billboard/hot-100?date=2025-07-01&range=1-10" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo"
+
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNDdhNjljYy00NzBiLTQ2NWMtOGEyNi0wMWYwOTQ4NTg5MGEiLCJpYXQiOjE3NTQ1ODgyMzEsImV4cCI6MTc1NDY3NDYzMX0.92lxIGi7P_xQ1TwLPXmQ91i0rk3C9mpbT9auv3Tl-Mc

@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { query } from '../config/database.js';
 import { logger } from '../config/logger.js';
+import searchService from '../services/searchService.js';
 
 
 const streamMedia = async (req, res) => {
@@ -518,11 +519,55 @@ async function trackUserHistory(userId, mediaId, duration) {
   }
 }
 
+const unifiedSearch = async (req, res) => {
+  try {
+    const { q: query, limit = 20, includeYoutube = 'true' } = req.query;
+    
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query must be at least 2 characters long'
+      });
+    }
+
+    const searchResults = await searchService.unifiedSearch(query.trim(), req.user?.id, {
+      limit: parseInt(limit),
+      includeYoutube: includeYoutube === 'true'
+    });
+
+    res.json({
+      success: true,
+      data: {
+        query: query.trim(),
+        results: {
+          local: searchResults.local,
+          youtube: searchResults.youtube,
+          total: searchResults.total
+        },
+        meta: {
+          localCount: searchResults.local.length,
+          youtubeCount: searchResults.youtube.length,
+          hasMore: searchResults.total >= parseInt(limit)
+        }
+      }
+    });
+
+  } catch (error) {
+    logger.error('Unified search error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Search failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 export default {
   streamMedia,
   getMediaList,
   getMediaDetails,
   toggleLike,
   updateWatchProgress,
-  getWatchHistory
+  getWatchHistory,
+  unifiedSearch
 };
