@@ -6,7 +6,7 @@ C:\Users\dhruv>curl -X POST http://localhost:3000/api/v1/auth/register -H "Conte
 {"success":true,"message":"User registered successfully","data":{"user":{"id":"b47a69cc-470b-465c-8a26-01f09485890a","username":"User1","email":"test@test.com","role":"user","createdAt":"2025-08-07T17:37:11.434Z"},"tokens":{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNDdhNjljYy00NzBiLTQ2NWMtOGEyNi0wMWYwOTQ4NTg5MGEiLCJpYXQiOjE3NTQ1ODgyMzEsImV4cCI6MTc1NDY3NDYzMX0.92lxIGi7P_xQ1TwLPXmQ91i0rk3C9mpbT9auv3Tl-Mc","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNDdhNjljYy00NzBiLTQ2NWMtOGEyNi0wMWYwOTQ4NTg5MGEiLCJpYXQiOjE3NTQ1ODgyMzEsImV4cCI6MTc1NTE5MzAzMX0.PXvYl6qZJeIv0pe6RaRthppVqWeof1neqlE7hELLC1M"}}}
 
 
-curl -X GET http://localhost:3000/api/v1/auth/profile -H "Authorization:Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo"
+curl -X GET http://10.0.0.212:3001/api/v1/auth/profile -H "Authorization:Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNDdhNjljYy00NzBiLTQ2NWMtOGEyNi0wMWYwOTQ4NTg5MGEiLCJpYXQiOjE3NTQ1ODgyMzEsImV4cCI6MTc1NDY3NDYzMX0.92lxIGi7P_xQ1TwLPXmQ91i0rk3C9mpbT9auv3Tl-Mc"
 
 curl -X POST http://localhost:3000/api/v1/downloads -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo" -d "{\"url\":\"https://music.youtube.com/watch?v=p8_ugAjWI5I\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
@@ -22,4 +22,11 @@ curl -X POST http://localhost:3000/api/v1/charts/import/hot-100 -H "Content-Type
 curl -X GET "http://localhost:3000/api/v1/charts/billboard/hot-100?date=2025-07-01&range=1-10" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo"
 
 
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNDdhNjljYy00NzBiLTQ2NWMtOGEyNi0wMWYwOTQ4NTg5MGEiLCJpYXQiOjE3NTQ1ODgyMzEsImV4cCI6MTc1NDY3NDYzMX0.92lxIGi7P_xQ1TwLPXmQ91i0rk3C9mpbT9auv3Tl-Mc
+
+curl -X POST https://openwav.dhruvyadav.ca/api/v1/auth/register -H "Content-Type: application/json" -d "{\"email\":\"test@test.com\",\"password\":\"Password@123\",\"username\":\"Test\"}"
+
+curl -X POST https://openwav.dhruvyadav.ca/api/v1/downloads -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3YmU2YWIzNC0zMTBkLTQ0Y2YtOTNhYy1iZGZmNWNjMmY2NjkiLCJpYXQiOjE3NTQ2MDc0NTQsImV4cCI6MTc1NDY5Mzg1NH0.6ZCm5nRCA86uT19xoWcd2TAJQ-WTfbXIOmi8gtgE8v8" -d "{\"url\":\"https://music.youtube.com/watch?v=p8_ugAjWI5I\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+
+curl -X GET "https://openwav.dhruvyadav.ca/api/v1/youtube/search?q=Ed%20Sheeran%20Perfect" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3YmU2YWIzNC0zMTBkLTQ0Y2YtOTNhYy1iZGZmNWNjMmY2NjkiLCJpYXQiOjE3NTQ2MDc0NTQsImV4cCI6MTc1NDY5Mzg1NH0.6ZCm5nRCA86uT19xoWcd2TAJQ-WTfbXIOmi8gtgE8v8"
+
+curl -X GET "https://openwav.dhruvyadav.ca/api/v1/charts/billboard/hot-100?date=2025-07-01&range=1-10" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3YmU2YWIzNC0zMTBkLTQ0Y2YtOTNhYy1iZGZmNWNjMmY2NjkiLCJpYXQiOjE3NTQ2MDc0NTQsImV4cCI6MTc1NDY5Mzg1NH0.6ZCm5nRCA86uT19xoWcd2TAJQ-WTfbXIOmi8gtgE8v8"
