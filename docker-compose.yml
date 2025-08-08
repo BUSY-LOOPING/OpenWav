@@ -2,8 +2,6 @@ services:
   backend:
     build: ./backend
     container_name: backend
-    volumes:
-      - ./backend:/usr/src/app
     ports:
       - "3001:3000"   
     environment:
