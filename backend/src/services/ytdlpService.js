@@ -11,6 +11,10 @@ class YtdlpService {
     this.downloadPath = process.env.MEDIA_STORAGE_PATH || './media';
     this.tempPath = process.env.TEMP_DOWNLOAD_PATH || './temp';
     this.ytdlpPath = process.env.YTDLP_PATH || 'yt-dlp';
+
+    console.log('Temp directory:', this.tempPath);
+    console.log('Looking for files in:', this.tempPath);
+    console.log('Files found:', fs.readdirSync(this.tempPath));
   }
 
   // Get video/audio information without downloading
@@ -65,7 +69,8 @@ class YtdlpService {
       format = 'mp3',
       audioOnly = true,
       userId = null,
-      taskId = null
+      taskId = null,
+      useCookies=false
     } = options;
 
 
@@ -106,14 +111,15 @@ class YtdlpService {
         quality,
         format,
         outputPath: tempOutputPath,
-        onProgress: updateProgress
+        onProgress: updateProgress,
+        useCookies
       });
 
       // Start download
       await updateProgress(5);
       const result = await youtubedl(url, downloadOptions);
 
-       const downloadedFiles = await fs.readdir(this.tempPath);
+      const downloadedFiles = await fs.readdir(this.tempPath);
       const matchedFile = downloadedFiles.find(filename => filename.startsWith(fileId));
 
       if (!matchedFile) {
@@ -229,7 +235,7 @@ class YtdlpService {
   }
 
   // Build yt-dlp download options
-  buildDownloadOptions({ audioOnly, quality, format, outputPath, onProgress }) {
+  buildDownloadOptions({ audioOnly, quality, format, outputPath, onProgress, useCookies=false }) {
     const options = {
       output: outputPath,
       noWarnings: true,
@@ -242,6 +248,14 @@ class YtdlpService {
       writeAutoSub: false,
       // ytdlpLocation: this.ytdlpPath
     };
+
+    if (useCookies) {
+      options.cookies = './cookies.txt'; 
+    }
+    if (useCookies) {
+    options.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    options.referer = 'https://www.youtube.com/';
+  }
 
     if (audioOnly) {
       options.extractAudio = true;
@@ -391,7 +405,7 @@ class YtdlpService {
   // Get thumbnail extension from URL
   getThumbnailExtension(url) {
     const match = url.match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
-    return match ? match[1] : 'jpg';
+    return match ? match[1] : 'webp';
   }
 
   // Update task progress in database

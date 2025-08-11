@@ -1,7 +1,6 @@
 import SearchBar from "./SearchBar";
 import {user} from "../data/mockData";
 import type {User} from "../index";
-import { useEffect } from "react";
 
 interface TopBarProps {
   user: User;

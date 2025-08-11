@@ -26,8 +26,8 @@ export default function BottomPlayer() {
           <button className="text-gray-400 hover:text-white">
             <span className="material-icons text-4xl">skip_previous</span>
           </button>
-          <button className="bg-white text-black rounded-full p-2 hover:scale-105">
-            <span className="material-icons text-4xl">pause</span>
+          <button className="bg-white text-black rounded-full p-2 hover:scale-105 h-14 w-14 flex items-center justify-center">
+            <span className="material-icons p-0 m-0">pause</span>
           </button>
           <button className="text-gray-400 hover:text-white">
             <span className="material-icons text-4xl">skip_next</span>

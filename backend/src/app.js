@@ -14,6 +14,16 @@ const __dirname = path.dirname(__filename);
 
 
 import routes from "./routes/index.js";
+const getAllowedOrigins = () => {
+  return process.env.NODE_ENV === "production"
+    ? [process.env.FRONTEND_URL]
+    : [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:8080",
+        "http://localhost:6330"
+      ];
+};
 
 const app = express();
 
@@ -43,18 +53,28 @@ chartService.setSocketIO(io);
 
 app.set("trust proxy", 1);
 
-app.use(helmet());
-
+app.use(helmet({
+  crossOriginResourcePolicy: { 
+    policy: "cross-origin" 
+  },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:", ...getAllowedOrigins()], 
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.socket.io"],
+      objectSrc: ["'none'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], 
+      fontSrc: ["'self'", "data:", ...getAllowedOrigins()], 
+      connectSrc: ["'self'", ...getAllowedOrigins()], 
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+}));
+console.log('frontend url - ', process.env.FRONTEND_URL);
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? process.env.FRONTEND_URL
-        : [
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://localhost:8080",
-          ],
+    origin: getAllowedOrigins(),
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Range"],
@@ -92,6 +112,12 @@ app.use("/api", routes);
 
 app.use(
   "/media",
+  (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET');
+    res.header('Access-Control-Allow-Headers', 'Range');
+    next();
+  },
   express.static(path.join(__dirname, "../media"), {
     maxAge: "1d",
     etag: true,

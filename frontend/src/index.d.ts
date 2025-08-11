@@ -29,3 +29,30 @@ export interface CurrentTrack {
   totalTime: string;
   progress: number;
 }
+
+export interface PlaylistTrack {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  duration: string;
+  albumArt: string;
+  dateAdded: string;
+  isLiked?: boolean;
+}
+
+export interface PlaylistDetails {
+  id: string;
+  name: string;
+  description: string;
+  coverImage: string;
+  creator: string;
+  creatorAvatar: string;
+  followers: string;
+  totalDuration: string;
+  trackCount: number;
+  isPublic: boolean;
+  isLiked: boolean;
+  tracks: PlaylistTrack[];
+}
+

@@ -170,7 +170,7 @@ INSERT INTO global_settings (setting_key, setting_value, data_type, description,
 ('allowed_domains', '["youtube.com", "youtu.be", "vimeo.com", "soundcloud.com"]', 'json', 'Allowed domains for downloads', false),
 ('registration_enabled', 'true', 'boolean', 'Whether new user registration is enabled', false),
 ('require_email_verification', 'false', 'boolean', 'Whether email verification is required', false),
-('max_downloads_per_user_per_day', '10', 'number', 'Maximum downloads per user per day', true),
+('max_downloads_per_user_per_day', '100', 'number', 'Maximum downloads per user per day', true),
 ('cleanup_failed_downloads_after_hours', '24', 'number', 'Clean up failed downloads after N hours', false),
 ('app_name', 'Media Streaming App', 'string', 'Application name', true),
 ('app_description', 'A powerful media streaming application', 'string', 'Application description', true);

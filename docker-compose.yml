@@ -1,56 +1,64 @@
-services:
-  backend:
-    build: ./backend
-    container_name: backend
-    ports:
-      - "3001:3000"   
-    environment:
-      - NODE_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=media_streaming
-      - DB_USER=postgres
-      - DB_PASSWORD=1234
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      - postgres
-      - redis
+  services:
+    backend:
+      build: ./backend
+      container_name: backend
+      ports:
+        - "3001:3000"   
+      environment:
+        - NODE_ENV=production
+        - DB_HOST=postgres
+        - DB_PORT=5432
+        - DB_NAME=media_streaming
+        - DB_USER=postgres
+        - DB_PASSWORD=1234
+        - REDIS_HOST=redis
+        - REDIS_PORT=6379
+      depends_on:
+        - postgres
+        - redis
+      volumes:
+      - ./backend/media:/usr/src/app/media        
+      - ./backend/temp:/usr/src/app/temp          
+      - ./backend/logs:/usr/src/app/logs   
 
-  frontend:
-    build: ./frontend
-    container_name: frontend
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "3000:3000"  
-    environment:
-      - NODE_ENV=development 
-    depends_on:
-      - backend
+    frontend:
+      build: ./frontend
+      container_name: frontend
+      volumes:
+        - ./frontend:/app
+        - /app/node_modules
+      ports:
+        - "6330:6330"  
+      environment:
+        - NODE_ENV=development 
+      depends_on:
+        - backend
 
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: postgres
-    restart: always
-    environment:
-      POSTGRES_DB: media_streaming
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1234
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    postgres:
+      image: postgres:15-alpine
+      container_name: postgres
+      restart: always
+      environment:
+        POSTGRES_DB: media_streaming
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: 1234
+      ports:
+        - "5432:5432"
+      volumes:
+        - pgdata:/var/lib/postgresql/data
+        - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
 
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    restart: always
-    ports:
-      - "6379:6379"
-    command: ["redis-server", "--loglevel", "warning"]
+    redis:
+      image: redis:7-alpine
+      container_name: redis
+      restart: always
+      ports:
+        - "6379:6379"
+      command: ["redis-server", "--loglevel", "warning"]
 
-volumes:
-  pgdata:
+  volumes:
+    pgdata:
+    backend_media:
+    backend_temp:
+    backend_logs:

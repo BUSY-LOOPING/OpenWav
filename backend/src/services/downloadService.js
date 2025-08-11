@@ -222,7 +222,8 @@ class DownloadService {
         audioOnly,
         userId,
         taskId,
-        onProgress
+        onProgress,
+        useCookies: true
       });
 
       // Save media to database
