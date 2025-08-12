@@ -2,7 +2,7 @@ import { playlists } from "../data/mockData";
 
 export default function Sidebar() {
   return (
-    <aside className="sidebar fixed top-0 left-0 h-screen bg-black p-6 flex flex-col" style={{ width: '240px' }}>
+    <aside className="sidebar fixed top-0 left-0 h-screen bg-black p-6 flex flex-col w-[15rem]">
       <div className="flex items-center mb-8">
         <span className="material-icons text-3xl mr-2">music_note</span>
         <h1 className="text-2xl font-bold">OpenWav</h1>

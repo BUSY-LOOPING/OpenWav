@@ -1,11 +1,35 @@
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import type { RootState, AppDispatch } from "../../store";
+
 import TopBar from "../../components/TopBar";
 import CategoryChips from "../../components/CategoryChips";
 import Section from "../../components/Section";
 import DiscoverSection from "../../components/DiscoverSection";
 import TrackCard from "../../components/TrackCard";
-import { listenAgainTracks, forgottenFavorites, categories, user } from "../../data/mockData";
+
+import {
+  listenAgainTracks,
+  forgottenFavorites,
+  categories,
+} from "../../data/mockData";
+import { getCurrentUser } from "../../store/slices/authSlice";
 
 export default function Home() {
+  const dispatch = useDispatch<AppDispatch>();
+
+  const user = useSelector((state: RootState) => state.auth.user);
+
+  useEffect(() => {
+    console.log("Redux user:", user);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      dispatch(getCurrentUser());
+    }
+  }, [user, dispatch]);
+
   const handlePlay = (track: any) => {
     console.log("Playing:", track);
   };
@@ -20,22 +44,19 @@ export default function Home() {
 
   return (
     <>
-      <TopBar user={user} />
       <div className="p-6">
         <CategoryChips categories={categories} />
-        
-        {/* New Discover Section with API integration */}
+
         <DiscoverSection />
-        
-        {/* Existing sections using TrackCard */}
-        <Section 
+
+        <Section
           title="Listen again"
-          subtitle="DHRUV YADAV"
+          subtitle={user?.username || "Your Music"}
           showMoreButton
         >
           {listenAgainTracks.map((track) => (
-            <TrackCard 
-              key={track.id} 
+            <TrackCard
+              key={track.id}
               track={track}
               onPlay={handlePlay}
               onLike={handleLike}
@@ -43,11 +64,11 @@ export default function Home() {
             />
           ))}
         </Section>
-        
+
         <Section title="Forgotten favourites">
           {forgottenFavorites.map((track) => (
-            <TrackCard 
-              key={track.id} 
+            <TrackCard
+              key={track.id}
               track={track}
               onPlay={handlePlay}
               onLike={handleLike}

@@ -1,13 +1,17 @@
 curl -X POST http://localhost:3001/api/v1/auth/register -H "Content-Type: application/json" -d "{\"email\":\"admin@example.com\",\"password\":\"Password@123\",\"username\":\"AdminUser\"}"
-{"success":true,"message":"User registered successfully","data":{"user":{"id":"053eccf8-5e3f-499b-acd0-eccdeea57a20","username":"AdminUser","email":"admin@example.com","role":"admin","createdAt":"2025-08-09T18:15:40.660Z"},"tokens":{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwNTNlY2NmOC01ZTNmLTQ5OWItYWNkMC1lY2NkZWVhNTdhMjAiLCJpYXQiOjE3NTQ3NjMzNDAsImV4cCI6MTc1NDg0OTc0MH0.USi08hpJWVgHxd6Gj70UsnUdvBgs4pLD2cUzjl895cw","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwNTNlY2NmOC01ZTNmLTQ5OWItYWNkMC1lY2NkZWVhNTdhMjAiLCJpYXQiOjE3NTQ3NjMzNDAsImV4cCI6MTc1NTM2ODE0MH0.3NObmnK8p6e_45fhp-I6BBEsRUrKsNSm6J56H43TaiU"}}}
+{"success":true,"message":"User registered successfully","data":{"user":{"id":"08bdf099-d642-4f7f-ae76-4f0dc9918f4f","username":"AdminUser","email":"admin@example.com","role":"admin","createdAt":"2025-08-11T22:51:38.851Z"},"tokens":{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTU1NzQ5OH0.oDx2Lvi5lz8D-7gEcwgxk9toA-uUbnipVELO10VVKco"}}}
 
 
 curl -X POST http://localhost:3000/api/v1/auth/register -H "Content-Type: application/json" -d "{\"email\":\"admin@example.com\",\"password\":\"Password@123\",\"username\":\"AdminUser\"}"
 
 
-curl -X GET http://localhost:3001/api/v1/auth/profile -H "Authorization:Bearer "
+curl -X GET http://localhost:3001/api/v1/auth/profile -H "Authorization:Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw"
 
-curl -X POST "http://localhost:3001/api/v1/downloads" -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwNTNlY2NmOC01ZTNmLTQ5OWItYWNkMC1lY2NkZWVhNTdhMjAiLCJpYXQiOjE3NTQ3NjMzNDAsImV4cCI6MTc1NDg0OTc0MH0.USi08hpJWVgHxd6Gj70UsnUdvBgs4pLD2cUzjl895cw" -d "{\"url\": \"https://music.youtube.com/watch?v=J7p4bzqLvCw\", \"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+curl -X POST "http://localhost:3001/api/v1/downloads" -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"url\": \"https://music.youtube.com/watch?v=J7p4bzqLvCw\", \"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+
+curl -X POST "http://localhost:3001/api/v1/downloads" -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"url\": \"https://music.youtube.com/watch?v=RmYCOm4ehKs\", \"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+
+curl -X POST "http://localhost:3001/api/v1/downloads" -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"url\": \"https://music.youtube.com/watch?v=DUjewG1uyXI\", \"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
 
 curl -X GET http://localhost:3001/api/v1/downloads -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4OTZkZTE2Yy01MDhlLTRjMjAtODVmNi05ZDUxNmEzZGNhNTkiLCJpYXQiOjE3NTQ3NTgzMTYsImV4cCI6MTc1NDg0NDcxNn0.AMrdXdsXezC64PrvjgFFCqGBOpRF8XcHsfrfdh3qPQA"
@@ -17,8 +21,14 @@ curl -X GET "http://localhost:3000/api/v1/youtube/search?q=Ed%20Sheeran%20Perfec
 
 curl -X POST http://localhost:3000/api/v1/youtube/auto-download -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo" -d "{\"query\":\"Ed Sheeran Perfect\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
-curl -X POST http://localhost:3000/api/v1/charts/import/hot-100 -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+curl -X POST http://localhost:3001/api/v1/charts/import/hot-100 -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
-curl -X GET "http://localhost:3000/api/v1/charts/billboard/hot-100?date=2025-07-01&range=1-10" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo"
+curl -X POST http://localhost:3001/api/v1/charts/import/radio-songs -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+
+curl -X POST http://localhost:3001/api/v1/charts/import/billboard-200 -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+
+curl -X GET "http://localhost:3001/api/v1/charts/billboard/hot-100?date=2025-07-01&range=1-10" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw"
 
 curl -X GET "localhost:3000/api/v1/media?page=1&limit=20"
+
+curl -X GET http://localhost:3001/api/v1/playlists -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw"

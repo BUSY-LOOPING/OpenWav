@@ -4,7 +4,6 @@ import {logger} from '../config/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 
 class PlaylistService {
-  // Create a new playlist
   async createPlaylist(data) {
     try {
       const result = await query(
@@ -29,7 +28,6 @@ class PlaylistService {
     }
   }
 
-  // Get playlist by ID with tracks
   async getPlaylistById(id, userId = null) {
     const result = await query(
       `SELECT 
@@ -60,7 +58,6 @@ class PlaylistService {
     return result.rows[0] || null;
   }
 
-  // Add track to playlist
   async addTrackToPlaylist(playlistId, mediaId, userId, position = null) {
     return transaction(async (client) => {
       // Get next position if not provided
@@ -87,7 +84,6 @@ class PlaylistService {
     });
   }
 
-  // Remove track from playlist
   async removeTrackFromPlaylist(playlistId, mediaId, userId) {
     return transaction(async (client) => {
       // Check ownership
@@ -123,7 +119,6 @@ class PlaylistService {
     });
   }
 
-  // Create playlist from Billboard chart
   async createPlaylistFromChart(chartData, chartName, userId) {
     try {
       const playlistName = `Billboard ${chartName} - ${chartData.date}`;
@@ -149,7 +144,6 @@ class PlaylistService {
     }
   }
 
-  // Get user's playlists
   async getUserPlaylists(userId, includePublic = true) {
     const whereCondition = includePublic 
       ? 'WHERE created_by = $1 OR is_public = true'
@@ -166,7 +160,6 @@ class PlaylistService {
     return result.rows;
   }
 
-  // Search playlists
   async searchPlaylists(searchTerm, limit = 20) {
     const result = await query(
       `SELECT p.*,
@@ -180,7 +173,6 @@ class PlaylistService {
     return result.rows;
   }
 
-  // Update playlist totals (track count and duration)
   async updatePlaylistTotals(playlistId, client = null) {
     const queryFn = client ? (sql, params) => client.query(sql, params) : query;
     
@@ -197,7 +189,6 @@ class PlaylistService {
     );
   }
 
-  // Delete playlist
   async deletePlaylist(id, userId) {
     const result = await query(
       'DELETE FROM playlists WHERE id = $1 AND created_by = $2 RETURNING *',
@@ -209,6 +200,72 @@ class PlaylistService {
     }
     
     return result.rows[0];
+  }
+
+  async getPublicPlaylists(limit = 50) {
+    try {
+      const result = await query(
+        `SELECT p.*,
+          (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) as track_count
+         FROM playlists p
+         WHERE p.is_public = true
+         ORDER BY p.created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      return result.rows;
+    } catch (error) {
+      logger.error('Failed to fetch public playlists:', error);
+      throw error;
+    }
+  }
+
+async getLatestChartPlaylist(chartName, userId = null) {
+  try {
+    const result = await query(
+      `SELECT p.id
+       FROM playlists p
+       WHERE p.is_public = true
+         AND p.metadata->>'chart_name' = $1
+       ORDER BY (p.metadata->>'chart_date')::date DESC
+       LIMIT 1`,
+      [chartName]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const playlistId = result.rows[0].id;
+    console.log('Playlist id ', playlistId);
+
+    const playlist = await this.getPlaylistById(playlistId, userId);
+    return playlist;
+
+  } catch (error) {
+    logger.error(`Failed to fetch latest chart playlist for ${chartName}:`, error);
+    throw error;
+  }
+}
+
+
+  async getChartPlaylists(chartName, limit = 10) {
+    try {
+      const result = await query(
+        `SELECT p.*,
+          (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) as track_count
+         FROM playlists p
+         WHERE p.is_public = true
+           AND p.metadata->>'chart_name' = $1
+         ORDER BY (p.metadata->>'chart_date')::date DESC
+         LIMIT $2`,
+        [chartName, limit]
+      );
+      return result.rows;
+    } catch (error) {
+      logger.error(`Failed to fetch chart playlists for ${chartName}:`, error);
+      throw error;
+    }
   }
 }
 

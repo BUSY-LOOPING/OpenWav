@@ -19,7 +19,6 @@ export default function DiscoverSection() {
       setLoading(true);
       setError(null);
       const response = await apiService.getMediaList({ limit: 6 });
-      console.log('loadMedia called');
       
       if (response.success) {
         const convertedTracks = convertMediaArrayToTracks(response.data.media);

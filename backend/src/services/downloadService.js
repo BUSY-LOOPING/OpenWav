@@ -1,8 +1,9 @@
 import Bull from 'bull';
-import {logger} from '../config/logger.js';
+import { logger } from '../config/logger.js';
 import { query, transaction } from '../config/database.js';
 import ytdlpService from './ytdlpService.js';
-import {createMedia} from './mediaService.js';
+import { createMedia } from './mediaService.js';
+import playlistService from './playlistService.js';
 
 
 class DownloadService {
@@ -131,7 +132,9 @@ class DownloadService {
       quality = '192k',
       format = 'mp3',
       audioOnly = true,
-      priority = 5
+      priority = 5,
+       playlistId = null,  // ✅ capture playlistId from options
+      position = null
     } = options;
 
     try {
@@ -148,11 +151,11 @@ class DownloadService {
 
       // Create download task in database
       const taskResult = await query(
-      `INSERT INTO download_tasks (url, requested_by, quality, format, priority, status)
+        `INSERT INTO download_tasks (url, requested_by, quality, format, priority, status)
       VALUES ($1, $2, $3, $4, $5, 'queued')
       RETURNING id, created_at`,
-      [url, userId, quality, format, priority]
-    );
+        [url, userId, quality, format, priority]
+      );
 
       const taskId = taskResult.rows[0].id;
 
@@ -164,7 +167,9 @@ class DownloadService {
         quality,
         format,
         audioOnly,
-        createdAt: taskResult.rows[0].created_at
+        createdAt: taskResult.rows[0].created_at,
+        playlistId,
+        position
       }, {
         priority: 10 - priority, // Bull uses higher numbers for higher priority
         delay: 0
@@ -210,7 +215,7 @@ class DownloadService {
           'UPDATE download_tasks SET progress = $1 WHERE id = $2',
           [progress, taskId]
         );
-        
+
         // Emit real-time progress
         this.emitProgress(taskId, job.id, progress);
       };
@@ -242,6 +247,7 @@ class DownloadService {
         uploadedBy: userId,
         metadata: downloadResult.metadata
       });
+      downloadResult.mediaId = media.id;
 
       // Update task with completion info
       await query(
@@ -394,7 +400,7 @@ class DownloadService {
 
     if (this.downloadQueue) {
       // Update queue concurrency
-    this.downloadQueue.concurrency = count;
+      this.downloadQueue.concurrency = count;
     }
 
     this.concurrentDownloads = count;
@@ -447,7 +453,20 @@ class DownloadService {
 
   // Event handlers
   async onJobCompleted(job, result) {
-    // Job completion is handled in processDownload
+    console.log('Job Completed', job.data);
+    if (job.data.playlistId && result.mediaId) {
+      try {
+        await playlistService.addTrackToPlaylist(
+          job.data.playlistId,
+          result.mediaId,
+          job.data.userId,
+          job.data.position || null
+        );
+        logger.info(`Track ${result.mediaId} added to playlist ${job.data.playlistId}`);
+      } catch (err) {
+        logger.error(`Failed to link media ${result.mediaId} to playlist ${job.data.playlistId}:`, err);
+      }
+    }
   }
 
   async onJobFailed(job, error) {
@@ -484,7 +503,7 @@ class DownloadService {
       // Simple estimation: assume average download time of 2 minutes
       const avgDownloadTime = 2 * 60 * 1000; // 2 minutes in ms
       const estimatedDelay = Math.ceil(stats.waiting / this.concurrentDownloads) * avgDownloadTime;
-      
+
       return new Date(Date.now() + estimatedDelay);
 
     } catch (error) {
@@ -522,7 +541,7 @@ class DownloadService {
         'SELECT setting_value FROM global_settings WHERE setting_key = $1',
         ['cleanup_failed_downloads_after_hours']
       );
-      
+
       return result.rows.length > 0 ? parseInt(result.rows[0].setting_value) : 24;
     } catch (error) {
       return 24; // Default to 24 hours
