@@ -1,7 +1,8 @@
 // src/services/playlistService.js
 import { query, transaction } from '../config/database.js';
-import {logger} from '../config/logger.js';
+import { logger } from '../config/logger.js';
 import { v4 as uuidv4 } from 'uuid';
+import { fetchMediaDetails } from './mediaService.js';
 
 class PlaylistService {
   async createPlaylist(data) {
@@ -28,35 +29,48 @@ class PlaylistService {
     }
   }
 
+
   async getPlaylistById(id, userId = null) {
-    const result = await query(
-      `SELECT 
-        p.*,
-        json_agg(
-          json_build_object(
-            'id', m.id,
-            'title', m.title,
-            'duration', m.duration,
-            'file_path', m.file_path,
-            'position', pt.position,
-            'added_at', pt.added_at,
-            'artists', (
-              SELECT json_agg(json_build_object('id', a.id, 'name', a.name, 'role', ma.role))
-              FROM media_artists ma 
-              JOIN artists a ON ma.artist_id = a.id 
-              WHERE ma.media_id = m.id
-            )
-          ) ORDER BY pt.position
-        ) FILTER (WHERE m.id IS NOT NULL) as tracks
-       FROM playlists p
-       LEFT JOIN playlist_tracks pt ON p.id = pt.playlist_id
-       LEFT JOIN media m ON pt.media_id = m.id
-       WHERE p.id = $1 AND (p.is_public = true OR p.created_by = $2)
-       GROUP BY p.id`,
+    const playlistResult = await query(
+      `SELECT p.*
+     FROM playlists p
+     WHERE p.id = $1
+       AND (p.is_public = true OR p.created_by = $2)`,
       [id, userId]
     );
-    return result.rows[0] || null;
+
+    if (playlistResult.rows.length === 0) {
+      return null;
+    }
+
+    const playlist = playlistResult.rows[0];
+
+    playlist.tracks = [];
+
+    const tracksResult = await query(
+      `SELECT pt.media_id, pt.position, pt.added_at
+     FROM playlist_tracks pt
+     WHERE pt.playlist_id = $1
+     ORDER BY pt.position ASC`,
+      [id]
+    );
+    logger.info(tracksResult);
+
+    for (const row of tracksResult.rows) {
+      const media = await fetchMediaDetails(row.media_id, userId);
+      if (media) {
+        playlist.tracks.push({
+          ...media,
+          position: row.position,
+          added_at: row.added_at
+        });
+      }
+    }
+
+    return playlist;
   }
+
+
 
   async addTrackToPlaylist(playlistId, mediaId, userId, position = null) {
     return transaction(async (client) => {
@@ -122,7 +136,7 @@ class PlaylistService {
   async createPlaylistFromChart(chartData, chartName, userId) {
     try {
       const playlistName = `Billboard ${chartName} - ${chartData.date}`;
-      
+
       // Create playlist
       const playlist = await this.createPlaylist({
         name: playlistName,
@@ -145,7 +159,7 @@ class PlaylistService {
   }
 
   async getUserPlaylists(userId, includePublic = true) {
-    const whereCondition = includePublic 
+    const whereCondition = includePublic
       ? 'WHERE created_by = $1 OR is_public = true'
       : 'WHERE created_by = $1';
 
@@ -175,7 +189,7 @@ class PlaylistService {
 
   async updatePlaylistTotals(playlistId, client = null) {
     const queryFn = client ? (sql, params) => client.query(sql, params) : query;
-    
+
     await queryFn(
       `UPDATE playlists SET 
         total_tracks = (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = $1),
@@ -194,11 +208,11 @@ class PlaylistService {
       'DELETE FROM playlists WHERE id = $1 AND created_by = $2 RETURNING *',
       [id, userId]
     );
-    
+
     if (result.rows.length === 0) {
       throw new Error('Playlist not found or not authorized');
     }
-    
+
     return result.rows[0];
   }
 
@@ -220,33 +234,39 @@ class PlaylistService {
     }
   }
 
-async getLatestChartPlaylist(chartName, userId = null) {
-  try {
-    const result = await query(
-      `SELECT p.id
-       FROM playlists p
-       WHERE p.is_public = true
-         AND p.metadata->>'chart_name' = $1
-       ORDER BY (p.metadata->>'chart_date')::date DESC
-       LIMIT 1`,
-      [chartName]
-    );
+  async getLatestChartPlaylist(chartName, userId = null) {
+    try {
+      const result = await query(
+        `SELECT p.id
+   FROM playlists p
+   WHERE p.is_public = true
+     AND p.metadata->>'chart_name' ILIKE $1
+     AND (p.metadata->>'chart_date' IS NULL OR p.metadata->>'chart_date' != 'undefined' OR p.metadata->>'chart_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+   ORDER BY 
+     COALESCE(NULLIF(p.metadata->>'chart_date', 'undefined')::date, p.created_at) DESC
+   LIMIT 1`,
+        [`%${chartName}%`]
+      );
 
-    if (result.rows.length === 0) {
-      return null;
+
+      if (result.rows.length === 0) {
+        logger.warn(`No playlist found for chart: ${chartName}`);
+        return null;
+      }
+
+      const playlistId = result.rows[0].id;
+
+      logger.debug(`Matched latest playlist for ${chartName} → ${playlistId}`);
+
+      const playlist = await this.getPlaylistById(playlistId, userId);
+
+      return playlist;
+
+    } catch (error) {
+      logger.error(`Failed to fetch latest chart playlist for ${chartName}:`, error);
+      throw error;
     }
-
-    const playlistId = result.rows[0].id;
-    console.log('Playlist id ', playlistId);
-
-    const playlist = await this.getPlaylistById(playlistId, userId);
-    return playlist;
-
-  } catch (error) {
-    logger.error(`Failed to fetch latest chart playlist for ${chartName}:`, error);
-    throw error;
   }
-}
 
 
   async getChartPlaylists(chartName, limit = 10) {

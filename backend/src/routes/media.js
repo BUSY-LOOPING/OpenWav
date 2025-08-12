@@ -6,6 +6,8 @@ const router = express.Router();
 
 router.get('/', optionalAuth, mediaController.getMediaList);
 
+router.get('/user/history', authenticateToken, mediaController.getWatchHistory);
+
 router.get('/search', optionalAuth, mediaController.unifiedSearch);
 
 router.get('/:id', optionalAuth, mediaController.getMediaDetails);
@@ -16,7 +18,6 @@ router.post('/:id/like', authenticateToken, mediaController.toggleLike);
 
 router.patch('/:id/progress', authenticateToken, mediaController.updateWatchProgress);
 
-router.get('/user/history', authenticateToken, mediaController.getWatchHistory);
 
 
 export default router;

@@ -1,8 +1,71 @@
 import express from 'express';
 import { authenticateToken, optionalAuth } from '../middleware/auth.js';
 import playlistService from '../services/playlistService.js';
+import { logger } from '../config/logger.js';
 
 const router = express.Router();
+
+router.get('/charts/hot-100/latest', async (req, res, next) => {
+  logger.info('hot-100');
+  try {
+    const playlist = await playlistService.getLatestChartPlaylist('hot-100');
+    if (!playlist) {
+      return res.status(404).json({ success: false, message: 'Hot 100 playlist not found' });
+    }
+    res.json({ success: true, playlist });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/charts/radio-songs/latest', async (req, res, next) => {
+  try {
+    const playlist = await playlistService.getLatestChartPlaylist('radio-songs');
+    if (!playlist) {
+      return res.status(404).json({ success: false, message: 'Radio Songs playlist not found' });
+    }
+    res.json({ success: true, playlist });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/charts/billboard-200/latest', async (req, res, next) => {
+  
+  try {
+    const playlist = await playlistService.getLatestChartPlaylist('billboard-200');
+    if (!playlist) {
+      return res.status(404).json({ success: false, message: 'Billboard 200 playlist not found' });
+    }
+    res.json({ success: true, playlist });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/search/:query', async (req, res, next) => {
+  logger.info("search");
+  try {
+    const playlists = await playlistService.searchPlaylists(req.params.query);
+    
+    res.json({
+      success: true,
+      playlists
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/public', optionalAuth, async (req, res, next) => {
+  logger.info('public');
+  try {
+    const playlists = await playlistService.getPublicPlaylists();
+    res.json({ success: true, playlists });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post('/', authenticateToken, async (req, res, next) => {
   try {
@@ -85,64 +148,6 @@ router.delete('/:id/tracks/:mediaId', authenticateToken, async (req, res, next) 
       success: true,
       message: 'Track removed from playlist'
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/search/:query', async (req, res, next) => {
-  try {
-    const playlists = await playlistService.searchPlaylists(req.params.query);
-    
-    res.json({
-      success: true,
-      playlists
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/public', optionalAuth, async (req, res, next) => {
-  try {
-    const playlists = await playlistService.getPublicPlaylists();
-    res.json({ success: true, playlists });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/charts/hot-100/latest', async (req, res, next) => {
-  try {
-    const playlist = await playlistService.getLatestChartPlaylist('hot-100');
-    if (!playlist) {
-      return res.status(404).json({ success: false, message: 'Hot 100 playlist not found' });
-    }
-    res.json({ success: true, playlist });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/charts/radio-songs/latest', async (req, res, next) => {
-  try {
-    const playlist = await playlistService.getLatestChartPlaylist('radio-songs');
-    if (!playlist) {
-      return res.status(404).json({ success: false, message: 'Radio Songs playlist not found' });
-    }
-    res.json({ success: true, playlist });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/charts/billboard-200/latest', async (req, res, next) => {
-  try {
-    const playlist = await playlistService.getLatestChartPlaylist('billboard-200');
-    if (!playlist) {
-      return res.status(404).json({ success: false, message: 'Billboard 200 playlist not found' });
-    }
-    res.json({ success: true, playlist });
   } catch (error) {
     next(error);
   }
