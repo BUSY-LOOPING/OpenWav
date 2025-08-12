@@ -18,6 +18,8 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
   const { accessToken, user  } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
+    console.log("accessToken", accessToken, "user", user);
+
     if (accessToken && !user) {
       console.log('dispatched getCurrentUser');
       dispatch(getCurrentUser());

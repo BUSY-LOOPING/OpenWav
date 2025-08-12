@@ -72,7 +72,7 @@ export const getCurrentUser = createAsyncThunk<
   try {
     const state = getState() as { auth: AuthState };
     const { data } = await authAPI.getCurrentUser(state.auth.accessToken!);
-    return data.user;
+    return data.data.user;
   } catch (error: any) {
     return rejectWithValue(
       error.response?.data?.message || "Failed to get user"

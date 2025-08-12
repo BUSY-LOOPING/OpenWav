@@ -4,8 +4,8 @@ import { connectDatabase } from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import fs from 'fs-extra';
 
-// const PORT = process.env.PORT || 3000;
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
+// const PORT = 3001;
 
 async function createDirectories() {
   const directories = [

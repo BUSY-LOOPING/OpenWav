@@ -4,10 +4,8 @@ import { query } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import searchService from '../services/searchService.js';
 
-
 const streamMedia = async (req, res) => {
   try {
-    
     const { id } = req.params;
     const range = req.headers.range;
 

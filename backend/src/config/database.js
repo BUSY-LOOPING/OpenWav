@@ -6,8 +6,8 @@ import {logger} from './logger.js';
 let pool;
 
 const dbConfig = {
-  // host: process.env.DB_HOST || 'localhost',
-  host: 'localhost',
+  host: process.env.DB_HOST || 'localhost',
+  // host: 'localhost',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
   database: process.env.DB_NAME || 'media_streaming',
   user: process.env.DB_USER,
