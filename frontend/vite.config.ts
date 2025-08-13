@@ -10,6 +10,9 @@ export default defineConfig({
   ],
   server: {
     port: 6330, 
-    host: true  
+    host: true,
+    allowedHosts: [
+      'openwav.dhruvyadav.ca'
+    ]
   }
 })
