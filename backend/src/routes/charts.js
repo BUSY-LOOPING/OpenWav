@@ -26,6 +26,7 @@ router.post('/import/:chartType', authenticateToken, async (req, res, next) => {
     }
 
     const result = await chartService.importBillboardChart(chartType, date, userId, {
+      date,
       range,
       quality,
       format

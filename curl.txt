@@ -21,7 +21,7 @@ curl -X GET "http://localhost:3000/api/v1/youtube/search?q=Ed%20Sheeran%20Perfec
 
 curl -X POST http://localhost:3000/api/v1/youtube/auto-download -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZjMwYWRiMC02YWNiLTRkMzgtYTM3YS0zYjQ0MWIyZTNhMzQiLCJpYXQiOjE3NTQ1MDA4NDUsImV4cCI6MTc1NDU4NzI0NX0.Zn4Uxc8yMjqvt5JyLu5SRnd3OAmyLkTqTVmFoAsyGAo" -d "{\"query\":\"Ed Sheeran Perfect\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
-curl -X POST http://localhost:3001/api/v1/charts/import/hot-100 -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
+curl -X POST http://localhost:3001/api/v1/charts/import/hot-100 -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwZDc4MjMwZC1hZTNlLTQxMmEtYTBlNy0xYzY0N2NhMGU0MDUiLCJpYXQiOjE3NTUxMTEwNzQsImV4cCI6MTc1NTE5NzQ3NH0.Mw8EnsNGbIokCbAeWeKqYpFGX6wklFwxLWVJGiWxFYI" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
 curl -X POST http://localhost:3001/api/v1/charts/import/radio-songs -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw" -d "{\"date\":\"2024-06-01\",\"range\":\"1-25\",\"format\":\"mp3\",\"quality\":\"bestaudio\"}"
 
@@ -36,3 +36,5 @@ curl -X GET http://localhost:3001/api/v1/playlists -H "Content-Type: application
 curl -X GET http://localhost:3001/api/v1/playlists/public -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw"
 
 curl -X GET http://localhost:3001/api/v1/playlists/charts/billboard-200/latest -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw"
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwZDc4MjMwZC1hZTNlLTQxMmEtYTBlNy0xYzY0N2NhMGU0MDUiLCJpYXQiOjE3NTUxMTEwNzQsImV4cCI6MTc1NTE5NzQ3NH0.Mw8EnsNGbIokCbAeWeKqYpFGX6wklFwxLWVJGiWxFYI

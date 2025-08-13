@@ -48,18 +48,19 @@ export default function DiscoverSection() {
   };
 
   if (loading) {
-    return (
-      <Section title="Discover" subtitle="Fresh content for you">
-        {[...Array(6)].map((_, index) => (
-          <div key={index} className="animate-pulse">
-            <div className="bg-gray-700 h-48 rounded-md mb-4"></div>
-            <div className="bg-gray-700 h-4 rounded mb-2"></div>
-            <div className="bg-gray-700 h-3 rounded w-3/4"></div>
-          </div>
-        ))}
-      </Section>
-    );
-  }
+  return (
+    <Section title="Discover" subtitle="Fresh content for you">
+      {[...Array(6)].map((_, index) => (
+        <div key={index} className="animate-pulse p-4">
+          <div className="bg-gray-700 aspect-square rounded-md mb-4"></div>
+          <div className="bg-gray-700 h-4 rounded mb-2"></div>
+          <div className="bg-gray-700 h-3 rounded w-3/4"></div>
+        </div>
+      ))}
+    </Section>
+  );
+}
+
 
   if (error) {
     return (

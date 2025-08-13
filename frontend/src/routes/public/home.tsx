@@ -2,10 +2,10 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "../../store";
 
-import TopBar from "../../components/TopBar";
 import CategoryChips from "../../components/CategoryChips";
 import Section from "../../components/Section";
 import DiscoverSection from "../../components/DiscoverSection";
+import BillboardSection from "../../components/BillboardSection";
 import TrackCard from "../../components/TrackCard";
 
 import {
@@ -48,6 +48,8 @@ export default function Home() {
         <CategoryChips categories={categories} />
 
         <DiscoverSection />
+
+        <BillboardSection />
 
         <Section
           title="Listen again"

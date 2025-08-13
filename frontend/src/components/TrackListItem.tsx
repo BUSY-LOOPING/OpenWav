@@ -1,71 +1,176 @@
 import { useState } from "react";
-import type { PlaylistTrack } from "../index";
+
+interface Track {
+  id: string;
+  title: string;
+  description?: string;
+  url?: string;
+  platform?: string;
+  duration?: number;
+  thumbnailPath?: string;
+  likesCount?: number;
+  userLiked?: boolean;
+  uploaderUsername?: string;
+  createdAt?: string;
+  metadata?: {
+    tags?: string[];
+    extractor?: string;
+    categories?: string[];
+    webpage_url?: string;
+  };
+  position?: number;
+  added_at?: string;
+}
 
 interface TrackListItemProps {
-  track: PlaylistTrack;
+  track: Track;
   index: number;
 }
 
 export default function TrackListItem({ track, index }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isLiked, setIsLiked] = useState(track.isLiked || false);
+  const [isLiked, setIsLiked] = useState(track.userLiked || false);
+
+  // Helper functions
+  const formatDuration = (seconds?: number) => {
+    if (!seconds) return "-";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "-";
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return "-";
+    }
+  };
+
+  const getThumbnailUrl = (thumbnailPath?: string) => {
+    if (!thumbnailPath) return "/default-album-art.jpg";
+    if (thumbnailPath.startsWith('http')) return thumbnailPath;
+    return `http://localhost:3001/${thumbnailPath}`;
+  };
+
+  const getArtist = () => {
+    const firstTag = track.metadata?.tags?.[0];
+    if (firstTag) return firstTag;
+    if (track.uploaderUsername) return track.uploaderUsername;
+    return "-";
+  };
+
+  const getAlbum = () => {
+    const categories = track.metadata?.categories;
+    if (categories?.length) return categories[0];
+    if (track.platform) return track.platform.charAt(0).toUpperCase() + track.platform.slice(1);
+    return "-";
+  };
+
+  const handlePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log("Playing track:", track.title);
+    if (track.url) {
+      window.open(track.url, '_blank');
+    }
+  };
+
+  const handleLike = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsLiked(!isLiked);
+    console.log(isLiked ? "Unliked:" : "Liked:", track.title);
+    // TODO: API call to like/unlike track
+  };
+
+  const handleMoreOptions = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log("More options for:", track.title);
+    // TODO: Show context menu
+  };
+
+  const handleAlbumClick = () => {
+    console.log("Navigate to album:", getAlbum());
+    // TODO: Navigate to album/category page
+  };
 
   return (
     <div 
-      className="grid grid-cols-12 gap-4 px-4 py-2 hover:bg-white/10 rounded-md group transition-colors"
+      className="grid grid-cols-12 gap-4 px-4 py-2 hover:bg-white/10 rounded-md group transition-colors cursor-pointer"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Track Number / Play Button */}
       <div className="col-span-1 flex items-center justify-center text-white/50">
         {isHovered ? (
-          <button className="hover:text-white">
+          <button 
+            onClick={handlePlay}
+            className="hover:text-white transition-colors"
+          >
             <span className="material-icons">play_arrow</span>
           </button>
         ) : (
-          <span className="text-sm">{index}</span>
+          <span className="text-sm">{track.position || index}</span>
         )}
       </div>
       
       {/* Title and Artist */}
       <div className="col-span-5 flex items-center space-x-3">
         <img 
-          src={track.albumArt} 
+          src={getThumbnailUrl(track.thumbnailPath)} 
           alt={track.title}
-          className="w-10 h-10 rounded"
+          className="w-10 h-10 rounded object-cover"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = "/default-album-art.jpg";
+          }}
         />
-        <div className="min-w-0">
-          <p className="text-white font-medium truncate">{track.title}</p>
-          <p className="text-white/50 text-sm truncate">{track.artist}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-white font-medium truncate">{track.title || "-"}</p>
+          <p className="text-white/50 text-sm truncate">{getArtist()}</p>
         </div>
       </div>
       
       {/* Album */}
       <div className="col-span-3 flex items-center">
-        <p className="text-white/50 text-sm truncate hover:text-white hover:underline cursor-pointer">
-          {track.album}
+        <p 
+          className="text-white/50 text-sm truncate hover:text-white hover:underline cursor-pointer"
+          onClick={handleAlbumClick}
+        >
+          {getAlbum()}
         </p>
       </div>
       
       {/* Date Added */}
       <div className="col-span-2 flex items-center">
-        <p className="text-white/50 text-sm">{track.dateAdded}</p>
+        <p className="text-white/50 text-sm">
+          {formatDate(track.added_at || track.createdAt)}
+        </p>
       </div>
       
-      {/* Duration and Like */}
-      <div className="col-span-1 flex items-center justify-center space-x-4">
+      {/* Duration and Actions */}
+      <div className="col-span-1 flex items-center justify-center space-x-2">
         <button 
-          onClick={() => setIsLiked(!isLiked)}
+          onClick={handleLike}
           className={`opacity-0 group-hover:opacity-100 transition-opacity ${
             isLiked ? 'text-green-500 opacity-100' : 'text-white/50 hover:text-white'
           }`}
+          title={isLiked ? 'Unlike' : 'Like'}
         >
           <span className="material-icons text-base">
             {isLiked ? 'favorite' : 'favorite_border'}
           </span>
         </button>
-        <span className="text-white/50 text-sm">{track.duration}</span>
-        <button className="opacity-0 group-hover:opacity-100 text-white/50 hover:text-white transition-opacity">
+        
+        <span className="text-white/50 text-sm min-w-[2.5rem] text-center">
+          {formatDuration(track.duration)}
+        </span>
+        
+        <button 
+          onClick={handleMoreOptions}
+          className="opacity-0 group-hover:opacity-100 text-white/50 hover:text-white transition-opacity"
+          title="More options"
+        >
           <span className="material-icons text-base">more_horiz</span>
         </button>
       </div>

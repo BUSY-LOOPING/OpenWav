@@ -1,8 +1,29 @@
 import TrackListItem from "./TrackListItem";
-import type { PlaylistTrack } from "../index";
+
+interface Track {
+  id: string;
+  title: string;
+  description?: string;
+  url?: string;
+  platform?: string;
+  duration?: number;
+  thumbnailPath?: string;
+  likesCount?: number;
+  userLiked?: boolean;
+  uploaderUsername?: string;
+  createdAt?: string;
+  metadata?: {
+    tags?: string[];
+    extractor?: string;
+    categories?: string[];
+    webpage_url?: string;
+  };
+  position?: number;
+  added_at?: string;
+}
 
 interface TrackListProps {
-  tracks: PlaylistTrack[];
+  tracks: Track[];
 }
 
 export default function TrackList({ tracks }: TrackListProps) {
@@ -18,15 +39,20 @@ export default function TrackList({ tracks }: TrackListProps) {
         </div>
       </div>
       
-      {/* Track List */}
       <div>
-        {tracks.map((track, index) => (
-          <TrackListItem 
-            key={track.id} 
-            track={track} 
-            index={index + 1}
-          />
-        ))}
+        {tracks?.length > 0 ? (
+          tracks.map((track, index) => (
+            <TrackListItem 
+              key={track.id} 
+              track={track} 
+              index={index + 1}
+            />
+          ))
+        ) : (
+          <div className="text-center text-white/50 py-8">
+            No tracks available
+          </div>
+        )}
       </div>
     </div>
   );

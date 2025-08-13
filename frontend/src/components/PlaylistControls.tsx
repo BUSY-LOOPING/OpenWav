@@ -5,8 +5,8 @@ export default function PlaylistControls() {
   const [isFollowing, setIsFollowing] = useState(false);
 
   return (
-    <div className="flex items-center space-x-6 mb-6">
-      <button className="bg-white hover:bg-gray-50 text-black rounded-full p-4 transition-colors w-14 h-14 flex items-center justify-center">
+    <div className="flex items-center space-x-3 mb-6">
+      <button className="bg-white hover:bg-gray-50 text-black rounded-full p-4 transition-colors w-10 h-10 flex items-center justify-center">
         <span className="material-icons text-2xl">play_arrow</span>
       </button>
       

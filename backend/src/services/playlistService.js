@@ -259,6 +259,7 @@ class PlaylistService {
       logger.debug(`Matched latest playlist for ${chartName} → ${playlistId}`);
 
       const playlist = await this.getPlaylistById(playlistId, userId);
+      playlist.name = chartName;
 
       return playlist;
 

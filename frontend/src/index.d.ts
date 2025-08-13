@@ -53,6 +53,7 @@ export interface PlaylistDetails {
   trackCount: number;
   isPublic: boolean;
   isLiked: boolean;
+  total_tracks?: number,
   tracks: PlaylistTrack[];
 }
 
