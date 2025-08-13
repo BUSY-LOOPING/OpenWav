@@ -15,18 +15,16 @@ export default function TopBar({ user }: TopBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    dispatch(logout()); // clears redux + localStorage
-    window.location.href = "/login"; // navigate to login page
+    dispatch(logout());
+    window.location.href = "/login"; 
   };
 
   return (
     <div className="top-bar sticky top-0 z-10 p-4 flex items-center justify-between bg-gray-900">
-      {/* Left side - Search */}
       <div className="flex items-center w-1/3">
         <SearchBar />
       </div>
 
-      {/* Right side - Notifications + User Menu */}
       <div className="flex items-center space-x-4 relative">
         <button className="text-gray-400 hover:text-white">
           <span className="material-icons">notifications</span>

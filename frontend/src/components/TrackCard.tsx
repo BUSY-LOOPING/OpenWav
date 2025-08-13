@@ -46,12 +46,11 @@ export default function TrackCard({
 
   return (
     <div
-      className="card p-2 relative group w-full" // Changed from p-4 to p-2
+      className="card p-2 relative group w-full" 
       style={{ backgroundColor: "#181818" }}
     >
       <div className="relative">
-        {/* Square container using aspect-square */}
-        <div className="aspect-square w-full mb-3 relative"> {/* Changed from mb-4 to mb-3 */}
+        <div className="aspect-square w-full mb-3 relative">
           {imageError ? (
             <div className="w-full h-full bg-gray-700 rounded-md flex items-center justify-center">
               <span className="material-icons text-gray-500 text-4xl">
@@ -67,7 +66,6 @@ export default function TrackCard({
             />
           )}
 
-          {/* Play button - responsive positioning */}
           <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4">
             <button
               onClick={handlePlay}
@@ -77,7 +75,6 @@ export default function TrackCard({
             </button>
           </div>
 
-          {/* Like button - responsive positioning */}
           <div className="absolute top-2 right-2 sm:top-4 sm:right-4">
             <button
               onClick={handleLike}
@@ -89,7 +86,6 @@ export default function TrackCard({
             </button>
           </div>
 
-          {/* Menu button - responsive positioning */}
           <div className="absolute top-2 left-2 sm:top-4 sm:left-4">
             <div className="relative">
               <button
@@ -123,7 +119,6 @@ export default function TrackCard({
         </div>
       </div>
 
-      {/* Track Information - responsive text sizing */}
       <div className="space-y-1">
         <h3 className="font-bold text-white truncate text-sm sm:text-base">
           {track.title}

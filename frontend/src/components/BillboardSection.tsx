@@ -8,6 +8,8 @@ import PlaylistCard from "./PlaylistCard";
 export default function BillboardSection() {
   const navigate = useNavigate();
   const { accessToken } = useSelector((state: RootState) => state.auth);
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+
   
   const [playlists, setPlaylists] = useState({
     hot100: null,
@@ -39,11 +41,11 @@ export default function BillboardSection() {
             return null;
           }
         };
-
+        
         const [hot100, billboard200, radioSongs] = await Promise.all([
-          fetchChart("http://localhost:3001/api/v1/playlists/charts/hot-100/latest", "Hot 100"),
-          fetchChart("http://localhost:3001/api/v1/playlists/charts/billboard-200/latest", "Billboard 200"),
-          fetchChart("http://localhost:3001/api/v1/playlists/charts/radio-songs/latest", "Radio Songs")
+          fetchChart(`${API_BASE_URL}/playlists/charts/hot-100/latest`, "Hot 100"),
+          fetchChart(`${API_BASE_URL}/playlists/charts/billboard-200/latest`, "Billboard 200"),
+          fetchChart(`${API_BASE_URL}/playlists/charts/radio-songs/latest`, "Radio Songs")
         ]);
 
         setPlaylists({

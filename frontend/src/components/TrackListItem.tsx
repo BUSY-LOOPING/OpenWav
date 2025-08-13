@@ -30,6 +30,7 @@ interface TrackListItemProps {
 export default function TrackListItem({ track, index }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isLiked, setIsLiked] = useState(track.userLiked || false);
+  const BACKEND_URL = import.meta.env.EXPRESS_BACKEND_URL || "http://localhost:3001";
 
   // Helper functions
   const formatDuration = (seconds?: number) => {
@@ -51,7 +52,7 @@ export default function TrackListItem({ track, index }: TrackListItemProps) {
   const getThumbnailUrl = (thumbnailPath?: string) => {
     if (!thumbnailPath) return "/default-album-art.jpg";
     if (thumbnailPath.startsWith('http')) return thumbnailPath;
-    return `http://localhost:3001/${thumbnailPath}`;
+    return `${BACKEND_URL}/${thumbnailPath}`;
   };
 
   const getArtist = () => {
@@ -80,18 +81,15 @@ export default function TrackListItem({ track, index }: TrackListItemProps) {
     e.stopPropagation();
     setIsLiked(!isLiked);
     console.log(isLiked ? "Unliked:" : "Liked:", track.title);
-    // TODO: API call to like/unlike track
   };
 
   const handleMoreOptions = (e: React.MouseEvent) => {
     e.stopPropagation();
     console.log("More options for:", track.title);
-    // TODO: Show context menu
   };
 
   const handleAlbumClick = () => {
     console.log("Navigate to album:", getAlbum());
-    // TODO: Navigate to album/category page
   };
 
   return (
@@ -100,7 +98,6 @@ export default function TrackListItem({ track, index }: TrackListItemProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Track Number / Play Button */}
       <div className="col-span-1 flex items-center justify-center text-white/50">
         {isHovered ? (
           <button 
@@ -114,7 +111,6 @@ export default function TrackListItem({ track, index }: TrackListItemProps) {
         )}
       </div>
       
-      {/* Title and Artist */}
       <div className="col-span-5 flex items-center space-x-3">
         <img 
           src={getThumbnailUrl(track.thumbnailPath)} 
@@ -131,7 +127,6 @@ export default function TrackListItem({ track, index }: TrackListItemProps) {
         </div>
       </div>
       
-      {/* Album */}
       <div className="col-span-3 flex items-center">
         <p 
           className="text-white/50 text-sm truncate hover:text-white hover:underline cursor-pointer"
@@ -141,14 +136,12 @@ export default function TrackListItem({ track, index }: TrackListItemProps) {
         </p>
       </div>
       
-      {/* Date Added */}
       <div className="col-span-2 flex items-center">
         <p className="text-white/50 text-sm">
           {formatDate(track.added_at || track.createdAt)}
         </p>
       </div>
       
-      {/* Duration and Actions */}
       <div className="col-span-1 flex items-center justify-center space-x-2">
         <button 
           onClick={handleLike}

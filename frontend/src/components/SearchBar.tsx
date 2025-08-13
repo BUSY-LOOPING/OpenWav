@@ -8,6 +8,9 @@ export default function SearchBar() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+  const BACKEND_URL = import.meta.env.EXPRESS_BACKEND_URL || "http://localhost:3001";
+
 
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
   const navigate = useNavigate();
@@ -28,7 +31,7 @@ export default function SearchBar() {
   const fetchSearchResults = async (searchTerm: string) => {
     try {
       const { data } = await axios.get(
-        `http://localhost:3001/api/v1/media/search?q=${encodeURIComponent(searchTerm)}&limit=5`,
+        `${API_BASE_URL}/media/search?q=${encodeURIComponent(searchTerm)}&limit=5`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
         }
@@ -64,7 +67,7 @@ export default function SearchBar() {
     if (item.source === "local") {
       return item.thumbnail_path.startsWith("http")
         ? item.thumbnail_path
-        : `http://localhost:3001/${item.thumbnail_path}`;
+        : `${BACKEND_URL}/${item.thumbnail_path}`;
     }
     return item.thumbnail_path;
   };
@@ -93,7 +96,6 @@ export default function SearchBar() {
         />
       </div>
 
-      {/* search dropdown */}
       {showDropdown && results.length > 0 && (
         <div className="absolute w-full mt-1 bg-gray-800 rounded-md shadow-lg z-50">
           {results.map((item) => (

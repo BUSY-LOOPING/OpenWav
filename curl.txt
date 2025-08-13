@@ -1,4 +1,4 @@
-curl -X POST http://localhost:3001/api/v1/auth/register -H "Content-Type: application/json" -d "{\"email\":\"admin@example.com\",\"password\":\"Password@123\",\"username\":\"AdminUser\"}"
+curl -X POST http://localhost:3001/api/v1/auth/register -H "Content-Type: application/json" -d "{\"email\":\"admin@example.com\",\"password\":\"Password@123\",\"username\":\"Admin\"}"
 {"success":true,"message":"User registered successfully","data":{"user":{"id":"08bdf099-d642-4f7f-ae76-4f0dc9918f4f","username":"AdminUser","email":"admin@example.com","role":"admin","createdAt":"2025-08-11T22:51:38.851Z"},"tokens":{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTAzOTA5OH0.RzcwqxX9youwelfTp1emZRLXqXY9nIZ2-SFr_GzPSdw","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwOGJkZjA5OS1kNjQyLTRmN2YtYWU3Ni00ZjBkYzk5MThmNGYiLCJpYXQiOjE3NTQ5NTI2OTgsImV4cCI6MTc1NTU1NzQ5OH0.oDx2Lvi5lz8D-7gEcwgxk9toA-uUbnipVELO10VVKco"}}}
 
 
