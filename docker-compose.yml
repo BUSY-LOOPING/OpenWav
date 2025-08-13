@@ -19,7 +19,7 @@
       volumes:
       - ./backend/media:/usr/src/app/media        
       - ./backend/temp:/usr/src/app/temp          
-      - ./backend/logs:/usr/src/app/logs   
+      - ./backend/logs:/usr/src/app/logs
 
     frontend:
       build: ./frontend
