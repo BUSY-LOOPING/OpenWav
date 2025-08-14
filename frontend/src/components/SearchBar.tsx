@@ -9,7 +9,7 @@ export default function SearchBar() {
   const [results, setResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
-  const BACKEND_URL = import.meta.env.EXPRESS_BACKEND_URL || "http://localhost:3001";
+  const BACKEND_URL = import.meta.env.VITE_EXPRESS_BACKEND_URL || "http://localhost:3001";
 
 
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
