@@ -13,6 +13,10 @@ export default function SearchPage() {
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
   const location = useLocation();
   const searchQuery = new URLSearchParams(location.search).get("q") || "";
+  const API_BASE_URL =
+    import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+  const BACKEND_URL =
+    import.meta.env.EXPRESS_BACKEND_URL || "http://localhost:3001";
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -24,7 +28,7 @@ export default function SearchPage() {
     try {
       setLoading(true);
       const { data } = await axios.get(
-        `http://localhost:3001/api/v1/media/search?q=${encodeURIComponent(searchQuery)}`,
+        `${API_BASE_URL}/media/search?q=${encodeURIComponent(searchQuery)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       if (data.success) {
@@ -50,9 +54,12 @@ export default function SearchPage() {
 
   const getThumbnailUrl = (item: any) => {
     if (item.source === "local") {
-      return item.thumbnail_path?.startsWith("http")
-        ? item.thumbnail_path
-        : `http://localhost:3001/${item.thumbnail_path}`;
+      return item.thumbnail_path.startsWith("http")
+        ? item.thumbnail_path.replace("http://localhost:3001", BACKEND_URL)
+        : `${BACKEND_URL.replace(/\/$/, "")}/${item.thumbnail_path.replace(
+            /^\//,
+            ""
+          )}`;
     }
     return item.thumbnail_path;
   };
