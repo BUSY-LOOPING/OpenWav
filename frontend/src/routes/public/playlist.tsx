@@ -5,7 +5,6 @@ import { useSelector } from "react-redux";
 import type { RootState } from "../../store";
 import PlaylistHeader from "../../components/PlaylistHeader";
 import TrackList from "../../components/TrackList";
-import { playlistData } from "../../data/playlistData"; // fallback only
 
 export default function Playlist() {
   const { id } = useParams<{ id: string }>();
@@ -14,22 +13,16 @@ export default function Playlist() {
   const [error, setError] = useState<string | null>(null);
   
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
 
   useEffect(() => {
     const fetchPlaylist = async () => {
-      if (!id || !accessToken) {
-        // No ID means we're not viewing a specific playlist, use fallback
-        setPlaylist(playlistData);
-        setLoading(false);
-        return;
-      }
-      
       try {
         setLoading(true);
         setError(null);
         
         const { data } = await axios.get(
-          `http://localhost:3001/api/v1/playlists/${id}`,
+          `${API_BASE_URL}/playlists/${id}`,
           {
             headers: { Authorization: `Bearer ${accessToken}` }
           }
@@ -44,7 +37,6 @@ export default function Playlist() {
         console.error("Failed to fetch playlist:", error);
         setError(error.response?.data?.message || error.message || 'Failed to load playlist');
         // Use fallback data on error
-        setPlaylist(playlistData);
       } finally {
         setLoading(false);
       }
