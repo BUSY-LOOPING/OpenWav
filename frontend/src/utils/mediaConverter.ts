@@ -2,6 +2,7 @@ import type { MediaItem } from "../types/api";
 import type { Track } from "../index";
 
 export const convertMediaToTrack = (media: MediaItem): Track => {
+  const API_BACKEND_URL = import.meta.env.VITE_EXPRESS_BACKEND_URL || "http://localhost:3001/";
   // Format duration from seconds to mm:ss
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -30,7 +31,7 @@ export const convertMediaToTrack = (media: MediaItem): Track => {
     id: media.id,
     title: media.title,
     artist: media.uploaderUsername,
-    albumArt: `http://localhost:3001/${media.thumbnailPath}`,
+    albumArt: `${API_BACKEND_URL}/${media.thumbnailPath}`,
     views: media.likesCount > 0 ? `${formatCount(media.likesCount)} likes` : undefined,
     tracks: `${formatDuration(media.duration)} • ${formatFileSize(media.fileSize)}`,
     type: 'song'
