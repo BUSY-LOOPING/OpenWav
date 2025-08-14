@@ -8,6 +8,9 @@ interface PlaylistHeaderProps {
 
 export default function PlaylistHeader({ playlist }: PlaylistHeaderProps) {
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
+  const API_BASE_URL = import.meta.env.VITE_EXPRESS_BACKEND_URL || "http://localhost:3001/api/v1";
+  const BACKEND_URL = import.meta.env.VITE_EXPRESS_BACKEND_URL || "http://localhost:3001";
+
 
   const handleImageError = (index: number) => {
     setImageErrors((prev) => ({ ...prev, [index]: true }));
@@ -17,7 +20,7 @@ export default function PlaylistHeader({ playlist }: PlaylistHeaderProps) {
     if (thumbnailPath.startsWith("http")) {
       return thumbnailPath;
     }
-    return `http://localhost:3001/${thumbnailPath}`;
+    return `${BACKEND_URL}/${thumbnailPath}`;
   };
 
   const tracksWithThumbnails =

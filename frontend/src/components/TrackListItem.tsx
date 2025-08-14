@@ -30,7 +30,7 @@ interface TrackListItemProps {
 export default function TrackListItem({ track, index }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isLiked, setIsLiked] = useState(track.userLiked || false);
-  const BACKEND_URL = import.meta.env.EXPRESS_BACKEND_URL || "http://localhost:3001";
+  const BACKEND_URL = import.meta.env.VITE_EXPRESS_BACKEND_URL || "http://localhost:3001";
 
   // Helper functions
   const formatDuration = (seconds?: number) => {

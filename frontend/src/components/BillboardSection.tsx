@@ -8,7 +8,7 @@ import PlaylistCard from "./PlaylistCard";
 export default function BillboardSection() {
   const navigate = useNavigate();
   const { accessToken } = useSelector((state: RootState) => state.auth);
-  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+  const API_BASE_URL = import.meta.env.VITE_EXPRESS_BACKEND_URL || "http://localhost:3001/api/v1";
 
   
   const [playlists, setPlaylists] = useState({
