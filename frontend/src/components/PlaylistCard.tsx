@@ -33,6 +33,7 @@ export default function PlaylistCard({
   const [isLiked, setIsLiked] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
+  const API_BASE_URL = import.meta.env.VITE_EXPRESS_BACKEND_URL || "http://localhost:3001/";
 
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -74,7 +75,7 @@ export default function PlaylistCard({
     if (thumbnailPath.startsWith('http')) {
       return thumbnailPath;
     }
-    return `http://localhost:3001/${thumbnailPath}`;
+    return `${API_BASE_URL}/${thumbnailPath}`;
   };
 
   const tracksWithThumbnails = playlist.tracks?.filter(track => track.thumbnailPath).slice(0, 4) || [];
