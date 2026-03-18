@@ -14,6 +14,7 @@ const initialState: AuthState = {
   refreshToken: localStorage.getItem("refreshToken"),
   isAuthenticated: !!localStorage.getItem("accessToken"),
   isLoading: false,
+  isInitialized: !localStorage.getItem("accessToken"),
   error: null,
 };
 
@@ -40,7 +41,7 @@ export const registerUser = createAsyncThunk<
     return data;
   } catch (error: any) {
     return rejectWithValue(
-      error.response?.data?.message || "Registration failed"
+      error.response?.data?.message || "Registration failed",
     );
   }
 });
@@ -59,7 +60,7 @@ export const refreshToken = createAsyncThunk<
     return data.accessToken;
   } catch (error: any) {
     return rejectWithValue(
-      error.response?.data?.message || "Token refresh failed"
+      error.response?.data?.message || "Token refresh failed",
     );
   }
 });
@@ -68,14 +69,13 @@ export const getCurrentUser = createAsyncThunk<
   User,
   void,
   { rejectValue: string }
->("auth/getCurrentUser", async (_, { getState, rejectWithValue }) => {
+>("auth/getCurrentUser", async (_, { rejectWithValue }) => {
   try {
-    const state = getState() as { auth: AuthState };
-    const { data } = await authAPI.getCurrentUser(state.auth.accessToken!);
+    const { data } = await authAPI.getCurrentUser();
     return data.data.user;
   } catch (error: any) {
     return rejectWithValue(
-      error.response?.data?.message || "Failed to get user"
+      error.response?.data?.message || "Failed to get user",
     );
   }
 });
@@ -96,7 +96,7 @@ const authSlice = createSlice({
     },
     setAccessToken: (state, action) => {
       state.accessToken = action.payload;
-      console.log('Access Token: ', action.payload);
+      console.log("Access Token: ", action.payload);
       localStorage.setItem("accessToken", action.payload);
     },
   },
@@ -132,7 +132,7 @@ const authSlice = createSlice({
         s.user = a.payload.data.user;
         s.accessToken = a.payload.data.tokens.accessToken;
         s.refreshToken = a.payload.data.tokens.refreshToken;
-        console.log('addCase : AccessToken', s.accessToken!);
+        console.log("addCase : AccessToken", s.accessToken!);
         localStorage.setItem("accessToken", s.accessToken!);
         localStorage.setItem("refreshToken", s.refreshToken!);
       })
@@ -160,13 +160,18 @@ const authSlice = createSlice({
       })
       .addCase(getCurrentUser.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload; 
+        state.isInitialized = true;
+        state.user = action.payload;
         state.isAuthenticated = true;
       })
       .addCase(getCurrentUser.rejected, (state, action) => {
         state.isLoading = false;
+        state.isInitialized = true;
         state.user = null;
         state.isAuthenticated = false;
+        state.accessToken = null;
+        state.refreshToken = null;
+        localStorage.clear();
         state.error = action.payload || "Failed to get user";
       });
   },

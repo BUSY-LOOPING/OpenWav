@@ -1,10 +1,10 @@
 import dotenv from 'dotenv';
-dotenv.config();;
+dotenv.config();
 
 import { Pool } from 'pg';
 import {logger} from './logger.js';
 let pool;
-
+ 
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   // host: 'localhost',
@@ -16,7 +16,9 @@ const dbConfig = {
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
   connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
   maxUses: 7500, // Close (and replace) a connection after it has been used 7500 times
-};
+};   
+
+console.log('dbConfig', dbConfig)
 
 const connectDatabase = async () => {
   try {

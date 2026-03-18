@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import TrackCard from "./TrackCard";
 import Section from "./Section";
-import { apiService } from "../services/api";
+// import { apiService } from "../services/api";
 import { convertMediaArrayToTracks } from "../utils/mediaConverter";
 import type { Track } from "../index";
 
@@ -18,8 +18,8 @@ export default function DiscoverSection() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getMediaList({ limit: 6 });
-      
+    //   const response = await apiService.getMediaList({ limit: 6 });
+      const response = null;
       if (response.success) {
         const convertedTracks = convertMediaArrayToTracks(response.data.media);
         setTracks(convertedTracks);

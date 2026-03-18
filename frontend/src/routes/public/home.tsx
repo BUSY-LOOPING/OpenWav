@@ -1,84 +1,47 @@
-import { useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import type { RootState, AppDispatch } from "../../store";
+import { useState } from 'react';
+import { useHomeSections } from '../../hooks/useMediaQueries';
+import { Section, SectionSkeleton } from '../../components/music/Section';
+import { Chip } from '../../components/ui/Chip';
+import type { Tile } from '../../services/mediaService';
 
-import CategoryChips from "../../components/CategoryChips";
-import Section from "../../components/Section";
-import DiscoverSection from "../../components/DiscoverSection";
-import BillboardSection from "../../components/BillboardSection";
-import TrackCard from "../../components/TrackCard";
-
-import {
-  listenAgainTracks,
-  forgottenFavorites,
-  categories,
-} from "../../data/mockData";
-import { getCurrentUser } from "../../store/slices/authSlice";
+const CHIPS = ['Podcasts', 'Relax', 'Feel good', 'Sleep', 'Sad', 'Energise', 'Party', 'Commute', 'Romance'];
 
 export default function Home() {
-  const dispatch = useDispatch<AppDispatch>();
+  const [activeChip, setActiveChip] = useState('Podcasts');
+  const { data: sections, isLoading, isError } = useHomeSections();
 
-  const user = useSelector((state: RootState) => state.auth.user);
-
-  useEffect(() => {
-    console.log("Redux user:", user);
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) {
-      dispatch(getCurrentUser());
-    }
-  }, [user, dispatch]);
-
-  const handlePlay = (track: any) => {
-    console.log("Playing:", track);
-  };
-
-  const handleLike = (track: any) => {
-    console.log("Liked:", track);
-  };
-
-  const handleAddToPlaylist = (track: any) => {
-    console.log("Adding to playlist:", track);
-  };
 
   return (
-    <>
-      <div className="p-6">
-        <CategoryChips categories={categories} />
+    <div className="relative min-h-full">
 
-        <DiscoverSection />
-
-        <BillboardSection />
-
-        <Section
-          title="Listen again"
-          subtitle={user?.username || "Your Music"}
-          showMoreButton
-        >
-          {listenAgainTracks.map((track) => (
-            <TrackCard
-              key={track.id}
-              track={track}
-              onPlay={handlePlay}
-              onLike={handleLike}
-              onAddToPlaylist={handleAddToPlaylist}
-            />
+      <div className="relative p-4 sm:p-6 lg:p-10 pt-4">
+        <div className="sticky top-0 z-10 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10 py-3 bg-[#030303]/95 flex gap-2 overflow-x-auto scrollbar-none mb-6 sm:mb-8">
+          {CHIPS.map((chip) => (
+            <Chip key={chip} label={chip} active={activeChip === chip} onClick={() => setActiveChip(chip)} />
           ))}
-        </Section>
+        </div>
 
-        <Section title="Forgotten favourites">
-          {forgottenFavorites.map((track) => (
-            <TrackCard
-              key={track.id}
-              track={track}
-              onPlay={handlePlay}
-              onLike={handleLike}
-              onAddToPlaylist={handleAddToPlaylist}
-            />
-          ))}
-        </Section>
+        {isError && (
+          <div className="flex items-center gap-2 text-red-400 text-sm mb-8 p-3 bg-red-400/5 rounded-lg">
+            <span className="material-symbols-outlined text-[18px]">error</span>
+            Failed to load content
+          </div>
+        )}
+
+        {isLoading ? (
+          <>
+            <SectionSkeleton />
+            <SectionSkeleton />
+            <SectionSkeleton />
+          </>
+        ) : (
+          sections?.map((section) => (
+            <Section key={section.type} section={section} />
+          ))
+        )}
+
+        <div className="h-8" />
       </div>
-    </>
+    </div>
   );
 }

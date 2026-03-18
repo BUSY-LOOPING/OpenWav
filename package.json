@@ -1,0 +1,14 @@
+{
+  "name": "openwav",
+  "private": true,
+  "scripts": {
+    "infra:up": "docker compose -f docker-compose.dev.yml --env-file .env up -d",
+    "infra:down": "docker compose -f docker-compose.dev.yml down",
+    "infra:logs": "docker compose -f docker-compose.dev.yml logs -f",
+    "migrate": "npm run migrate:up --prefix backend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:downloader": "npm run dev --prefix services/downloader",
+    "dev:scheduler": "npm run dev --prefix services/scheduler"
+  }
+}

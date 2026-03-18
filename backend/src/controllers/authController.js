@@ -3,20 +3,10 @@ import crypto from 'crypto';
 import { query, transaction } from '../config/database.js';
 import { generateTokens, verifyRefreshToken } from '../middleware/auth.js';
 import { logger } from '../config/logger.js';
-import { validationResult } from 'express-validator';
 
 const register = async (req, res) => {
   console.log('register');
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
     const { username, email, password } = req.body;
 
     const settingResult = await query(
@@ -100,15 +90,6 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
     const { email, password } = req.body;
 
     const userResult = await query(

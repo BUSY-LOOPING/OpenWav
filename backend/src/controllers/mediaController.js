@@ -3,109 +3,38 @@ import path from 'path';
 import { query } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import searchService from '../services/searchService.js';
+import { minioPublicClient } from '../config/minio.js';
 
 const streamMedia = async (req, res) => {
   try {
     const { id } = req.params;
-    const range = req.headers.range;
 
-    // Get media info from database
     const mediaResult = await query(
-      'SELECT * FROM media WHERE id = $1 AND status = $2',
+      'SELECT id, file_path, format, duration FROM media WHERE id = $1 AND status = $2',
       [id, 'completed']
     );
 
     if (mediaResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Media not found or not available'
-      });
+      return res.status(404).json({ success: false, message: 'Media not found' });
     }
 
     const media = mediaResult.rows[0];
-    const filePath = path.resolve(media.file_path);
 
-    // Check if file exists
-    if (!await fs.pathExists(filePath)) {
-      logger.error(`Media file not found: ${filePath}`);
-      return res.status(404).json({
-        success: false,
-        message: 'Media file not found on disk'
-      });
-    }
-
-    // Get file stats
-    const stat = await fs.stat(filePath);
-    const fileSize = stat.size;
-
-    // Track user history if user is logged in
     if (req.user) {
-      await trackUserHistory(req.user.id, media.id, media.duration);
+      trackUserHistory(req.user.id, media.id, media.duration);
     }
 
-    // Set content type based on format
-    const contentType = getContentType(media.format);
-    res.set('Content-Type', contentType);
-    res.set('Accept-Ranges', 'bytes');
-    res.set('Content-Length', fileSize);
-    res.set('Cache-Control', 'public, max-age=3600');
-    res.set('Last-Modified', stat.mtime.toUTCString());
+    const url = await minioPublicClient.presignedGetObject(
+      process.env.MINIO_BUCKET_AUDIO,
+      media.file_path,
+      24 * 60 * 60
+    );
 
-    // Handle range requests for video streaming
-    if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = (end - start) + 1;
+    return res.redirect(url);
 
-      // Validate range
-      if (start >= fileSize || end >= fileSize || start > end) {
-        res.status(416).set({
-          'Content-Range': `bytes */${fileSize}`
-        });
-        return res.end();
-      }
-
-      // Set partial content headers
-      res.status(206);
-      res.set({
-        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-        'Content-Length': chunksize
-      });
-
-      // Create read stream for the requested range
-      const stream = fs.createReadStream(filePath, { start, end });
-      
-      stream.on('error', (error) => {
-        logger.error(`Stream error for file ${filePath}:`, error);
-        if (!res.headersSent) {
-          res.status(500).end();
-        }
-      });
-
-      stream.pipe(res);
-
-    } else {
-      // Send entire file
-      const stream = fs.createReadStream(filePath);
-      
-      stream.on('error', (error) => {
-        logger.error(`Stream error for file ${filePath}:`, error);
-        if (!res.headersSent) {
-          res.status(500).end();
-        }
-      });
-
-      stream.pipe(res);
-    }
-
-  } catch (error) {
-    logger.error('Media streaming error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Media streaming failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+  } catch (err) {
+    logger.error('Stream error:', err);
+    return res.status(500).json({ success: false, message: 'Stream failed' });
   }
 };
 
@@ -560,6 +489,229 @@ const unifiedSearch = async (req, res) => {
   }
 };
 
+const getHomeSections = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const sections = [];
+
+    const [
+      unfinished,
+      recentHistory,
+      liked,
+      allMedia,
+    ] = await Promise.all([
+      query(
+        `SELECT m.id, m.title, m.thumbnail_path, m.duration, m.platform, m.metadata,
+                h.last_position, h.watch_time
+         FROM user_history h
+         JOIN media m ON h.media_id = m.id
+         WHERE h.user_id = $1
+           AND h.completed = false
+           AND h.last_position > 30
+           AND m.status = 'completed'
+         ORDER BY h.played_at DESC
+         LIMIT 6`,
+        [userId]
+      ),
+      query(
+        `SELECT m.id, m.title, m.thumbnail_path, m.duration, m.platform, m.metadata,
+                h.last_position, h.completed, h.played_at
+         FROM user_history h
+         JOIN media m ON h.media_id = m.id
+         WHERE h.user_id = $1 AND m.status = 'completed'
+         ORDER BY h.played_at DESC
+         LIMIT 12`,
+        [userId]
+      ),
+      query(
+        `SELECT m.id, m.title, m.thumbnail_path, m.duration, m.platform, m.metadata
+         FROM likes l
+         JOIN media m ON l.media_id = m.id
+         WHERE l.user_id = $1 AND m.status = 'completed'
+         ORDER BY l.created_at DESC
+         LIMIT 6`,
+        [userId]
+      ),
+      query(
+        `SELECT id, title, thumbnail_path, duration, platform, metadata
+         FROM media
+         WHERE status = 'completed'
+         ORDER BY created_at DESC
+         LIMIT 12`,
+        []
+      ),
+    ]);
+
+    const hasHistory = recentHistory.rows.length > 0;
+
+    if (unfinished.rows.length > 0) {
+      sections.push({
+        type: 'keep_listening',
+        title: 'Keep listening',
+        subtitle: null,
+        avatar: false,
+        tiles: unfinished.rows.map((row, i) => ({
+          id: row.id,
+          tileType: 'standard',
+          size: i === 0 ? 'large' : 'normal',
+          title: row.title,
+          subtitle: formatPlatform(row.platform),
+          thumbnail: row.thumbnail_path,
+          href: `/media/${row.id}`,
+          resumePosition: row.last_position,
+        })),
+      });
+    }
+
+    if (hasHistory) {
+      const listenAgainTiles = recentHistory.rows.slice(0, 6).map((row, i) => ({
+        id: row.id,
+        tileType: i === 0 ? 'mosaic' : 'standard',
+        size: i === 0 ? 'large' : 'normal',
+        title: row.title,
+        subtitle: formatPlatform(row.platform),
+        thumbnail: row.thumbnail_path,
+        images: i === 0
+          ? recentHistory.rows.slice(0, 4).map(r => r.thumbnail_path).filter(Boolean)
+          : undefined,
+        href: `/media/${row.id}`,
+      }));
+
+      sections.push({
+        type: 'listen_again',
+        title: 'Listen again',
+        subtitle: req.user.username,
+        avatar: true,
+        tiles: listenAgainTiles,
+      });
+    }
+
+    if (liked.rows.length > 0) {
+      sections.push({
+        type: 'liked',
+        title: 'From your likes',
+        subtitle: null,
+        avatar: false,
+        tiles: liked.rows.map((row, i) => ({
+          id: row.id,
+          tileType: 'standard',
+          size: i === 0 ? 'large' : 'normal',
+          title: row.title,
+          subtitle: formatPlatform(row.platform),
+          thumbnail: row.thumbnail_path,
+          href: `/media/${row.id}`,
+        })),
+      });
+    }
+
+    if (hasHistory && recentHistory.rows.length >= 3) {
+      const tags = extractTopTags(recentHistory.rows);
+      if (tags.length > 0) {
+        const taggedMedia = await query(
+          `SELECT id, title, thumbnail_path, duration, platform, metadata
+           FROM media
+           WHERE status = 'completed'
+             AND id NOT IN (
+               SELECT media_id FROM user_history WHERE user_id = $1
+             )
+             AND metadata->'tags' ?| $2
+           ORDER BY created_at DESC
+           LIMIT 6`,
+          [userId, tags]
+        );
+
+        if (taggedMedia.rows.length > 0) {
+          sections.push({
+            type: 'recommended',
+            title: 'Recommended for you',
+            subtitle: 'Based on your taste',
+            avatar: false,
+            tiles: taggedMedia.rows.map((row, i) => ({
+              id: row.id,
+              tileType: 'standard',
+              size: i === 0 ? 'large' : 'normal',
+              title: row.title,
+              subtitle: formatPlatform(row.platform),
+              thumbnail: row.thumbnail_path,
+              href: `/media/${row.id}`,
+            })),
+          });
+        }
+      }
+    }
+
+    if (allMedia.rows.length > 0) {
+      const historyIds = new Set(recentHistory.rows.map(r => r.id));
+      const newTracks = allMedia.rows.filter(r => !historyIds.has(r.id)).slice(0, 6);
+
+      if (newTracks.length > 0) {
+        sections.push({
+          type: 'new_tracks',
+          title: 'New on OpenWav',
+          subtitle: null,
+          avatar: false,
+          tiles: newTracks.map((row, i) => ({
+            id: row.id,
+            tileType: 'standard',
+            size: i === 0 ? 'large' : 'normal',
+            title: row.title,
+            subtitle: formatPlatform(row.platform),
+            thumbnail: row.thumbnail_path,
+            href: `/media/${row.id}`,
+          })),
+        });
+      }
+    }
+
+    if (sections.length === 0) {
+      sections.push({
+        type: 'discover',
+        title: 'Start listening',
+        subtitle: 'Explore OpenWav',
+        avatar: false,
+        tiles: allMedia.rows.slice(0, 6).map((row, i) => ({
+          id: row.id,
+          tileType: 'standard',
+          size: i === 0 ? 'large' : 'normal',
+          title: row.title,
+          subtitle: formatPlatform(row.platform),
+          thumbnail: row.thumbnail_path,
+          href: `/media/${row.id}`,
+        })),
+      });
+    }
+
+    res.json({ success: true, data: { sections } });
+  } catch (error) {
+    logger.error('Get home sections error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get home sections',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+function formatPlatform(platform) {
+  const map = { youtube: 'YouTube', soundcloud: 'SoundCloud', vimeo: 'Vimeo', unknown: '' };
+  return map[platform] ?? '';
+}
+
+function extractTopTags(rows) {
+  const freq = {};
+  for (const row of rows) {
+    const tags = row.metadata?.tags ?? [];
+    for (const tag of tags.slice(0, 5)) {
+      freq[tag] = (freq[tag] ?? 0) + 1;
+    }
+  }
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([tag]) => tag);
+}
+
+
 export default {
   streamMedia,
   getMediaList,
@@ -567,5 +719,6 @@ export default {
   toggleLike,
   updateWatchProgress,
   getWatchHistory,
-  unifiedSearch
+  unifiedSearch,
+  getHomeSections
 };

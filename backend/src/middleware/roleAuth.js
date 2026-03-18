@@ -1,4 +1,4 @@
-import {logger} from '../config/logger';
+import {logger} from '../config/logger.js';
 const requireRole = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {

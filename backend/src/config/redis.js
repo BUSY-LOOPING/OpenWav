@@ -3,6 +3,7 @@ import {logger} from './logger.js';
 
 
 let redisClient;
+let redisSubscriber; 
 
 const redisConfig = {
   host: process.env.REDIS_HOST || 'localhost',
@@ -25,6 +26,7 @@ const redisConfig = {
 const connectRedis = async () => {
   try {
     redisClient = new Redis(redisConfig);
+    
 
     // Event listeners
     redisClient.on('connect', () => {
@@ -52,10 +54,12 @@ const connectRedis = async () => {
     });
 
     // Test connection
-    await redisClient.connect();
+    // await redisClient.connect();
     await redisClient.ping();
     
     logger.info(`Redis connected at ${redisConfig.host}:${redisConfig.port}`);
+    redisSubscriber = new Redis(redisConfig);
+
     return redisClient;
 
   } catch (error) {
@@ -69,6 +73,11 @@ const getRedisClient = () => {
     throw new Error('Redis not initialized. Call connectRedis first.');
   }
   return redisClient;
+};
+
+const getRedisSubscriber = () => {
+  if (!redisSubscriber) throw new Error('Redis subscriber not initialized');
+  return redisSubscriber;
 };
 
 // Redis utility functions
@@ -483,6 +492,7 @@ process.on('SIGTERM', closeRedis);
 export  {
   connectRedis,
   getRedisClient,
+  getRedisSubscriber,
   redisUtils,
   sessionUtils,
   cacheUtils,

@@ -6,12 +6,15 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "dev": "node --env-file ../.env.dev --watch src/server.js",
     "setup-db": "node scripts/setup-database.js",
-    "migrate": "node scripts/migrate.js",
+    "migrate:up": "dotenv -e ../.env.dev -- npx node-pg-migrate up",
+    "migrate:down": "dotenv -e ../.env.dev -- npx node-pg-migrate down",
+    "migrate:create": "dotenv -e ../.env.dev -- npx node-pg-migrate create",
     "create-admin": "node scripts/create-admin.js"
   },
   "dependencies": {
+    "amqplib": "^0.10.9",
     "bcryptjs": "^2.4.3",
     "bull": "^4.11.3",
     "cors": "^2.8.5",
@@ -25,9 +28,12 @@
     "helmet": "^7.0.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
+    "minio": "^8.0.7",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.2",
-    "pg": "^8.11.3",
+    "node-pg-migrate": "^8.0.4",
+    "openwav": "file:..",
+    "pg": "^8.20.0",
     "sharp": "^0.32.4",
     "socket.io": "^4.8.1",
     "uuid": "^9.0.0",
@@ -35,6 +41,7 @@
     "youtube-dl-exec": "^2.2.7"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "nodemon": "^3.0.1"
   },
   "keywords": [
@@ -45,6 +52,6 @@
     "express",
     "postgresql"
   ],
-  "author": "Your Name",
+  "author": "BUSY-LOOPING",
   "license": "MIT"
 }

@@ -10,6 +10,8 @@ router.get('/user/history', authenticateToken, mediaController.getWatchHistory);
 
 router.get('/search', optionalAuth, mediaController.unifiedSearch);
 
+router.get('/home/sections', authenticateToken, mediaController.getHomeSections);
+
 router.get('/:id', optionalAuth, mediaController.getMediaDetails);
 
 router.get('/:id/stream', optionalAuth, mediaController.streamMedia);

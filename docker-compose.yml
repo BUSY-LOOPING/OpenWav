@@ -1,64 +1,217 @@
-  services:
-    backend:
-      build: ./backend
-      container_name: backend
-      ports:
-        - "3001:3000"   
-      environment:
-        - NODE_ENV=production
-        - DB_HOST=postgres
-        - DB_PORT=5432
-        - DB_NAME=media_streaming
-        - DB_USER=postgres
-        - DB_PASSWORD=1234
-        - REDIS_HOST=redis
-        - REDIS_PORT=6379
-      depends_on:
-        - postgres
-        - redis
-      volumes:
-      - ./backend/media:/usr/src/app/media        
-      - ./backend/temp:/usr/src/app/temp          
+services:
+  backend:
+    build: ./backend
+    container_name: openwav_backend
+    ports:
+      - "${BACKEND_PORT:-3001}:${PORT:-3000}"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres        
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_URL=amqp://openwav:openwav_rabbit_pass@rabbitmq:5672/openwav
+      - MINIO_ENDPOINT=minio
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./backend/media:/usr/src/app/media
+      - ./backend/temp:/usr/src/app/temp
       - ./backend/logs:/usr/src/app/logs
+    networks:
+      - openwav-internal
+    restart: unless-stopped
 
-    frontend:
-      build: ./frontend
-      container_name: frontend
-      volumes:
-        - ./frontend:/app
-        - /app/node_modules
-      ports:
-        - "6330:6330"  
-      environment:
-        - NODE_ENV=development 
-      depends_on:
-        - backend
+  frontend:
+    build: ./frontend
+    container_name: openwav_frontend
+    ports:
+      - "${FRONTEND_PORT:-6330}:${FRONTEND_PORT:-6330}"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - openwav-internal
+    restart: unless-stopped
 
+  downloader:
+    build: ./services/downloader
+    container_name: openwav_downloader
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_URL=amqp://openwav:openwav_rabbit_pass@rabbitmq:5672/openwav
+      - MINIO_ENDPOINT=minio
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./backend/temp:/app/temp
+      - ./backend/media:/app/media
+      - ./backend/logs:/app/logs
+    networks:
+      - openwav-internal
+    restart: unless-stopped
 
-    postgres:
-      image: postgres:15-alpine
-      container_name: postgres
-      restart: always
-      environment:
-        POSTGRES_DB: media_streaming
-        POSTGRES_USER: postgres
-        POSTGRES_PASSWORD: 1234
-      ports:
-        - "5432:5432"
-      volumes:
-        - pgdata:/var/lib/postgresql/data
-        - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+  scheduler:
+    build: ./services/scheduler
+    container_name: openwav_scheduler
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_URL=amqp://openwav:openwav_rabbit_pass@rabbitmq:5672/openwav
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs
+    networks:
+      - openwav-internal
+    restart: unless-stopped
 
-    redis:
-      image: redis:7-alpine
-      container_name: redis
-      restart: always
-      ports:
-        - "6379:6379"
-      command: ["redis-server", "--loglevel", "warning"]
+  postgres:
+    image: postgres:15-alpine
+    container_name: openwav_postgres
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT:-5432}:${DB_PORT:-5432}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - openwav-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  volumes:
-    pgdata:
-    backend_media:
-    backend_temp:
-    backend_logs:
+  redis:
+    image: redis:7-alpine
+    container_name: openwav_redis
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: ["redis-server", "--loglevel", "warning"]
+    volumes:
+      - redisdata:/data
+    networks:
+      - openwav-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: openwav_rabbitmq
+    restart: always
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    networks:
+      - openwav-internal
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: openwav_minio
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    env_file:
+      - .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - miniodata:/data
+    networks:
+      - openwav-internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  minio-setup:
+    image: minio/mc:latest
+    container_name: openwav_minio_setup
+    env_file:
+      - .env
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - openwav-internal
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+      /usr/bin/mc mb -p myminio/$${MINIO_BUCKET_AUDIO} || true &&
+      /usr/bin/mc mb -p myminio/$${MINIO_BUCKET_TEMP} || true &&
+      echo 'MinIO buckets ready.'
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_AUDIO: ${MINIO_BUCKET_AUDIO}
+      MINIO_BUCKET_TEMP: ${MINIO_BUCKET_TEMP}
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitmqdata:
+  miniodata:
+
+networks:
+  openwav-internal:
+    driver: bridge

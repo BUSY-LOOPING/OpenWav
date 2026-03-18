@@ -1,15 +1,17 @@
-import { useEffect } from "react";
-import { Outlet } from "react-router";
-import { useSelector, useDispatch } from "react-redux";
-import Sidebar from "../../components/Sidebar";
-import BottomPlayer from "../../components/BottomPlayer";
-import TopBar from "../../components/TopBar";
-import { getCurrentUser } from "../../store/slices/authSlice";
-import type { RootState, AppDispatch } from "../../store";
+import { useEffect } from 'react';
+import { Outlet } from 'react-router';
+import { useSelector, useDispatch } from 'react-redux';
+import BottomPlayer from '../../components/player/BottomPlayer';
+import { getCurrentUser } from '../../store/slices/authSlice';
+import type { RootState, AppDispatch } from '../../store';
+import { AppLayout } from '../../components/layout/AppLayout';
+import { useAudioPlayer } from '../../hooks/useAudioPlayer';
 
 export default function Layout() {
   const dispatch = useDispatch<AppDispatch>();
   const { user, accessToken } = useSelector((state: RootState) => state.auth);
+
+  useAudioPlayer();
 
   useEffect(() => {
     if (accessToken && !user) {
@@ -18,15 +20,12 @@ export default function Layout() {
   }, [accessToken, user, dispatch]);
 
   return (
-    <div className="bg-black text-white min-h-screen">
-      <div className="flex">
-        <Sidebar />
-        <main className="main-content w-full bg-gray-900 min-h-screen pb-24 ml-[15rem]">
-          <TopBar user={user ?? { username: "" }} />
-          <Outlet />
-        </main>
-      </div>
-      <BottomPlayer />
-    </div>
+    <AppLayout
+      userName={user?.username ?? ''}
+      playerBar={<BottomPlayer />}
+      activeHref={window.location.pathname}
+    >
+      <Outlet />
+    </AppLayout>
   );
 }
