@@ -26,7 +26,7 @@ OpenWav is a full-stack monorepo consisting of three services: a REST API backen
 - **BullMQ** — job queue management within the worker
 
 ### Frontend
-- **React 18** with **TypeScript**
+- **React 19** with **TypeScript**
 - **Vite** — build tool and dev server
 - **Redux Toolkit** — global state for auth and player
 - **TanStack Query (React Query)** — server state, caching, and background refetching

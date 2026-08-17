@@ -1,6 +1,9 @@
-import type { NavItem, NavSection, Playlist } from "../../types";
+import type { NavItem, NavSection } from "../../types";
+import type { Playlist } from "../../types/playlist";
 import { SkeletonSidebarPlaylist } from "../skeleton";
 import { NavLink as RouterNavLink } from "react-router-dom";
+
+import PlayIcon from "../../assets/svg/play.svg?react";
 
 export interface SidebarProps {
   state: "expanded" | "collapsed" | "hidden";
@@ -12,6 +15,7 @@ export interface SidebarProps {
   showPlaylists?: boolean;
   showNewPlaylist?: boolean;
   footerItems?: NavItem[];
+  onNewPlaylist?: () => void;
 }
 
 const HomeIcon = ({ className }: { className?: string }) => (
@@ -91,10 +95,7 @@ const PinIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-export const iconMap: Record<
-  string,
-  ({ className }: { className?: string }) => JSX.Element
-> = {
+export const iconMap: Record<string, React.FC<{ className?: string }>> = {
   home: HomeIcon,
   explore: ExploreIcon,
   library: LibraryIcon,
@@ -121,7 +122,7 @@ function SidebarNavItem({
   return (
     <RouterNavLink
       to={item.href}
-      end={item.end ?? item.href === '/'}
+      end={item.end ?? item.href === "/"}
       title={showCollapsed ? item.label : undefined}
       className={({ isActive }) => `
         flex items-center gap-4 rounded-lg
@@ -178,6 +179,7 @@ export function Sidebar({
   showPlaylists = false,
   showNewPlaylist = false,
   footerItems = [],
+  onNewPlaylist,
 }: SidebarProps) {
   const isExpanded = state === "expanded";
   const isCollapsed = state === "collapsed";
@@ -248,14 +250,15 @@ export function Sidebar({
                 }}
               >
                 <button
-                  className="
-                  flex items-center gap-2.5 px-3 py-2
+                  onClick={onNewPlaylist}
+                  className="w-full justify-center
+                  flex items-center gap-2 px-3 py-2
                   bg-white/[0.06] hover:bg-white/10
-                  rounded-full text-sm font-medium text-white
+                  rounded-full text-sm md:text-base font-medium text-white
                   transition-colors duration-150 whitespace-nowrap
                 "
                 >
-                  <PlusIcon className="w-4 h-4 shrink-0" />
+                  <PlusIcon className="md:w-6 md:h-6 w-4 h-4 shrink-0" />
                   <span>New playlist</span>
                 </button>
               </div>
@@ -285,23 +288,32 @@ export function Sidebar({
                 <SkeletonSidebarPlaylist />
               ) : (
                 playlists.map((pl) => (
-                  <a
+                  <RouterNavLink
                     key={pl.id}
-                    href={`/playlist/${pl.id}`}
-                    className="block px-5 py-2 rounded-md text-[#aaa] hover:text-white hover:bg-white/[0.04] transition-colors duration-100"
+                    to={`/playlist/${pl.id}`}
+                    className={({ isActive }) =>
+                      `group items-center flex justify-between px-5 py-2 rounded-lg transition-colors duration-150 ${
+                        isActive
+                          ? "bg-white/10 text-white"
+                          : "text-[#aaa] hover:text-white hover:bg-white/[0.06]"
+                      }`
+                    }
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium text-white truncate">
-                        {pl.name}
-                      </span>
-                      {pl.isPinned && (
-                        <PinIcon className="w-3 h-3 text-[#aaa] shrink-0" />
-                      )}
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-white truncate">
+                          {pl.name}
+                        </span>
+                        {pl.isPinned && (
+                          <PinIcon className="w-3 h-3 text-[#aaa] shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-xs text-[#b3b3b3] truncate mt-0.5">
+                        {pl.isAuto ? "Auto playlist" : pl.ownerUsername}
+                      </p>
                     </div>
-                    <p className="text-xs text-[#666] truncate mt-0.5">
-                      {pl.isAuto ? "Auto playlist" : pl.owner}
-                    </p>
-                  </a>
+                    <PlayIcon className="w-5 h-5 bg-white rounded-full box-content p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  </RouterNavLink>
                 ))
               )}
             </div>

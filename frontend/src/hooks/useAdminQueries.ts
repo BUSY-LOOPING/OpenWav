@@ -4,6 +4,7 @@ import {
   useQueryClient,
   keepPreviousData,
 } from '@tanstack/react-query';
+
 import {
   fetchDashboardStats,
   fetchUsers,
@@ -13,32 +14,28 @@ import {
   deleteUser,
   cancelDownloadTask,
   updateGlobalSetting,
-  updateConcurrentDownloads,
-  type GetUsersParams,
-  type GetDownloadTasksParams,
-  type UpdateUserPayload,
-  type UpdateSettingPayload,
 } from '../services/adminService';
+
+import type {
+  GetUsersParams,
+  GetDownloadTasksParams,
+  UpdateUserPayload,
+  UpdateSettingPayload,
+} from '../types/admin';
 
 export const adminKeys = {
   all:       ['admin'] as const,
-  stats:     ()                              => [...adminKeys.all, 'stats']               as const,
-  users:     (params: GetUsersParams)        => [...adminKeys.all, 'users', params]        as const,
-  downloads: (params: GetDownloadTasksParams)=> [...adminKeys.all, 'downloads', params]    as const,
-  settings:  ()                              => [...adminKeys.all, 'settings']             as const,
+  stats:     ()                               => [...adminKeys.all, 'stats']            as const,
+  users:     (params: GetUsersParams)         => [...adminKeys.all, 'users', params]    as const,
+  downloads: (params: GetDownloadTasksParams) => [...adminKeys.all, 'downloads', params] as const,
+  settings:  ()                               => [...adminKeys.all, 'settings']         as const,
 };
-
-const NO_CACHE = {
-  staleTime: 0,
-  gcTime: 0,
-  refetchOnWindowFocus: true,
-} as const;
 
 export function useDashboardStats() {
   return useQuery({
-    queryKey:       adminKeys.stats(),
-    queryFn:        fetchDashboardStats,
-    staleTime:      30_000,
+    queryKey:        adminKeys.stats(),
+    queryFn:         fetchDashboardStats,
+    staleTime:       30_000,
     refetchInterval: 60_000,
   });
 }
@@ -70,7 +67,6 @@ export function useDeleteUser() {
 }
 
 export function useAdminDownloads(params: GetDownloadTasksParams = {}) {
-    console.log('params', params)
   return useQuery({
     queryKey:        adminKeys.downloads(params),
     queryFn:         () => fetchDownloadTasks(params),
@@ -109,7 +105,11 @@ export function useUpdateSetting() {
 export function useUpdateConcurrentDownloads() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (count: number) => updateConcurrentDownloads(count),
+    mutationFn: (count: number) =>
+      updateGlobalSetting('max_concurrent_downloads', {
+        value: count,
+        dataType: 'number',
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminKeys.settings() });
       qc.invalidateQueries({ queryKey: adminKeys.stats() });

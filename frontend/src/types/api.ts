@@ -32,3 +32,22 @@ export interface MediaListResponse {
     };
   };
 }
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  data: T;
+}
+
+export interface CursorPagination {
+  limit: number;
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface OffsetPagination {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}

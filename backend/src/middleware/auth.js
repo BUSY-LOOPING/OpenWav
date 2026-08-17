@@ -2,6 +2,57 @@ import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 import { logger } from '../config/logger.js';
 
+
+/**
+ * Throws error when not found or deactivated
+ */
+const vertifyToken = async (token) => {
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Get user from database
+        const userResult = await query(
+            'SELECT id, username, email, role, is_active FROM users WHERE id = $1',
+            [decoded.userId]
+        );
+
+        if (userResult.rows.length === 0) {
+            const error = new Error('User not found');
+            error.statusCode = 401;
+            throw error;
+        }
+
+        const user = userResult.rows[0];
+
+        if (!user.is_active) {
+            const error = new Error('Account is deactivated');
+            error.statusCode = 401;
+            throw error;
+        }
+        query('UPDATE users SET last_seen = NOW() WHERE id = $1', [user.id]).catch(() => { });
+        return user
+    } catch (error) {
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid token'
+            });
+        }
+
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({
+                success: false,
+                message: 'Token expired'
+            });
+        }
+
+        logger.error('Authentication error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Authentication failed'
+        });
+    }
+}
 // Verify JWT token middleware
 const authenticateToken = async (req, res, next) => {
     try {
@@ -16,33 +67,9 @@ const authenticateToken = async (req, res, next) => {
         }
 
         // Verify the token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await vertifyToken(token)
 
-        // Get user from database
-        const userResult = await query(
-            'SELECT id, username, email, role, is_active FROM users WHERE id = $1',
-            [decoded.userId]
-        );
-
-        if (userResult.rows.length === 0) {
-            return res.status(401).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-
-        const user = userResult.rows[0];
-
-        if (!user.is_active) {
-            return res.status(401).json({
-                success: false,
-                message: 'Account is deactivated'
-            });
-        }
-
-        // Add user info to request
         req.user = user;
-        query('UPDATE users SET last_seen = NOW() WHERE id = $1', [user.id]).catch(() => { });
         next();
 
     } catch (error) {
@@ -57,6 +84,12 @@ const authenticateToken = async (req, res, next) => {
             return res.status(401).json({
                 success: false,
                 message: 'Token expired'
+            });
+        }
+        if (error.statusCode && error.message) {
+            return res.status(error.statusCode).json({
+                success: false,
+                message: error.message
             });
         }
 
@@ -134,5 +167,6 @@ export {
     authenticateToken,
     optionalAuth,
     generateTokens,
-    verifyRefreshToken
+    verifyRefreshToken,
+    vertifyToken
 };

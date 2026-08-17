@@ -1,12 +1,12 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
-import type { HomeSection, Tile } from '../../services/mediaService';
-import { MusicCard } from './MusicCard';
-import { Avatar } from '../ui/Avatar';
-import { SkeletonCard } from '../skeleton';
+import { useRef, useState, useEffect, useCallback } from "react";
+import type { HomeSection, Tile } from "../../services/mediaService";
+import { MusicCard } from "./MusicCard";
+import { Avatar } from "../ui/Avatar";
+import { SkeletonCard } from "../skeleton";
 
 const CARD_WIDTH_NORMAL = 160;
-const CARD_WIDTH_LARGE  = 340;
-const CARD_GAP          = 16;
+const CARD_WIDTH_LARGE = 340;
+const CARD_GAP = 16;
 
 interface SectionProps {
   section: HomeSection;
@@ -88,7 +88,7 @@ function SectionHeader({
 
 export function Section({ section }: SectionProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
   const updateScrollState = useCallback(() => {
@@ -102,20 +102,20 @@ export function Section({ section }: SectionProps) {
     const el = scrollRef.current;
     if (!el) return;
     updateScrollState();
-    el.addEventListener('scroll', updateScrollState, { passive: true });
+    el.addEventListener("scroll", updateScrollState, { passive: true });
     const ro = new ResizeObserver(updateScrollState);
     ro.observe(el);
     return () => {
-      el.removeEventListener('scroll', updateScrollState);
+      el.removeEventListener("scroll", updateScrollState);
       ro.disconnect();
     };
   }, [updateScrollState, section.tiles]);
 
-  function scrollBy(dir: 'left' | 'right') {
+  function scrollBy(dir: "left" | "right") {
     const el = scrollRef.current;
     if (!el) return;
     const step = (CARD_WIDTH_NORMAL + CARD_GAP) * 3;
-    el.scrollBy({ left: dir === 'left' ? -step : step, behavior: 'smooth' });
+    el.scrollBy({ left: dir === "left" ? -step : step, behavior: "smooth" });
   }
 
   return (
@@ -126,27 +126,29 @@ export function Section({ section }: SectionProps) {
         avatar={section.avatar}
         canScrollLeft={canScrollLeft}
         canScrollRight={canScrollRight}
-        onScrollLeft={() => scrollBy('left')}
-        onScrollRight={() => scrollBy('right')}
+        onScrollLeft={() => scrollBy("left")}
+        onScrollRight={() => scrollBy("right")}
       />
 
       <div
         ref={scrollRef}
-        className="flex overflow-x-auto gap-4 pb-2"
+        className="flex overflow-x-auto gap-4 pb-2 overflow-hidden"
         style={{
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          WebkitOverflowScrolling: 'touch',
+          overflowX: "auto",
+          overflowY: "visible",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        <style>{`div::-webkit-scrollbar { display: none; }`}</style>
+        {/* <style>{`div::-webkit-scrollbar { display: none; }`}</style> */}
 
         {section.tiles.map((tile) => (
           <MusicCard
             key={tile.id}
             tile={tile}
             queue={section.tiles}
-            width={tile.size === 'large' ? CARD_WIDTH_LARGE : CARD_WIDTH_NORMAL}
+            width={tile.size === "large" ? CARD_WIDTH_LARGE : CARD_WIDTH_NORMAL}
           />
         ))}
 
@@ -174,7 +176,11 @@ export function SectionSkeleton() {
       </div>
       <div className="flex gap-4 overflow-hidden">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="shrink-0" style={{ width: i === 0 ? CARD_WIDTH_LARGE : CARD_WIDTH_NORMAL }}>
+          <div
+            key={i}
+            className="shrink-0"
+            style={{ width: i === 0 ? CARD_WIDTH_LARGE : CARD_WIDTH_NORMAL }}
+          >
             <SkeletonCard />
           </div>
         ))}

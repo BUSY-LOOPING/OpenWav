@@ -20,9 +20,7 @@ export function useAudioPlayer() {
   const isMuted      = useSelector((s: RootState) => s.player.isMuted);
   const seekTarget   = useSelector((s: RootState) => s.player.seekTarget);
 
-  // Create audio element once
   useEffect(() => {
-    console.log('current track src', audioRef.current)
     const audio = new Audio();
     audio.preload = 'metadata';
     audioRef.current = audio;
@@ -58,7 +56,6 @@ export function useAudioPlayer() {
     };
   }, [dispatch]);
 
-  // Load new track when currentTrack changes
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
@@ -80,7 +77,6 @@ export function useAudioPlayer() {
     }
   }, [isPlaying]);
 
-  // Sync volume
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;

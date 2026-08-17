@@ -36,16 +36,16 @@ const getDashboardStats = async (req, res) => {
 const getUsers = async (req, res) => {
   try {
     const {
-      page = 1,
       limit = 20,
+      cursor,        // created_at::id cursor instead of offset
       search,
       role,
       status,
-      sortBy = 'created_at',
       sortOrder = 'DESC',
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    const parsedLimit = Math.min(parseInt(limit) || 20, 100);
+    const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     const conditions = [];
     const params = [];
     let i = 1;
@@ -56,63 +56,86 @@ const getUsers = async (req, res) => {
       i++;
     }
     if (role) {
-      conditions.push(`u.role = $${i}`);
+      conditions.push(`u.role = $${i++}`);
       params.push(role);
-      i++;
     }
     if (status !== undefined) {
-      conditions.push(`u.is_active = $${i}`);
+      conditions.push(`u.is_active = $${i++}`);
       params.push(status === 'active');
-      i++;
+    }
+
+    // Cursor-based pagination — avoids OFFSET degradation on large tables
+    // Cursor format: "created_at_ISO__uuid"
+    if (cursor) {
+      const [cursorTs, cursorId] = cursor.split('__');
+      const op = sortDir === 'DESC' ? '<' : '>';
+      conditions.push(
+        `(u.created_at, u.id) ${op} ($${i++}::timestamptz, $${i++}::uuid)`
+      );
+      params.push(cursorTs, cursorId);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const allowedSort = ['created_at', 'username', 'email', 'last_login'];
-    const sortField = allowedSort.includes(sortBy) ? sortBy : 'created_at';
-    const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    const countResult = await query(`SELECT COUNT(*) as total FROM users u ${where}`, params);
-    const total = parseInt(countResult.rows[0].total);
-
+    // Single query — aggregate stats in subqueries to avoid N+1
+    // LEFT JOIN LATERAL is more efficient than correlated subqueries for per-row aggregates
     const usersResult = await query(
       `SELECT
-         u.*,
-         COUNT(DISTINCT m.id)  as media_count,
-         COUNT(DISTINCT dt.id) as download_count,
-         COALESCE(SUM(m.file_size), 0) as total_storage_used
+         u.id, u.username, u.email, u.role,
+         u.is_active, u.email_verified,
+         u.last_login, u.last_seen, u.created_at,
+         COALESCE(ms.media_count, 0)        AS media_count,
+         COALESCE(ms.total_storage, 0)      AS total_storage,
+         COALESCE(ds.download_count, 0)     AS download_count
        FROM users u
-       LEFT JOIN media m ON u.id = m.uploaded_by
-       LEFT JOIN download_tasks dt ON u.id = dt.requested_by
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)            AS media_count,
+                COALESCE(SUM(file_size), 0) AS total_storage
+         FROM media
+         WHERE uploaded_by = u.id
+       ) ms ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS download_count
+         FROM download_tasks
+         WHERE requested_by = u.id
+       ) ds ON true
        ${where}
-       GROUP BY u.id
-       ORDER BY u.${sortField} ${sortDir}
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, limit, offset],
+       ORDER BY u.created_at ${sortDir}, u.id ${sortDir}
+       LIMIT $${i}`,
+      [...params, parsedLimit + 1]  // fetch one extra to determine if there's a next page
     );
+
+    const rows = usersResult.rows;
+    const hasNextPage = rows.length > parsedLimit;
+    if (hasNextPage) rows.pop(); // remove the extra row
+
+    const nextCursor = hasNextPage
+      ? `${rows.at(-1).created_at.toISOString()}__${rows.at(-1).id}`
+      : null;
 
     res.json({
       success: true,
       data: {
-        users: usersResult.rows.map((u) => ({
-          id: u.id,
-          username: u.username,
-          email: u.email,
-          role: u.role,
-          isActive: u.is_active,
-          emailVerified: u.email_verified,
-          lastLogin: u.last_login,
-          createdAt: u.created_at,
+        users: rows.map((u) => ({
+          id:             u.id,
+          username:       u.username,
+          email:          u.email,
+          role:           u.role,
+          isActive:       u.is_active,
+          emailVerified:  u.email_verified,
+          lastLogin:      u.last_login,
+          lastSeen:       u.last_seen,
+          createdAt:      u.created_at,
           stats: {
-            mediaCount: parseInt(u.media_count),
+            mediaCount:   parseInt(u.media_count),
             downloadCount: parseInt(u.download_count),
-            storageUsed: parseInt(u.total_storage_used),
+            storageUsed:  parseInt(u.total_storage),
           },
         })),
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / limit),
+          limit:     parsedLimit,
+          nextCursor,
+          hasNextPage,
         },
       },
     });
@@ -223,65 +246,94 @@ const deleteUser = async (req, res) => {
 const getDownloadTasks = async (req, res) => {
   try {
     const {
-      page = 1,
       limit = 20,
+      cursor,
       status,
       userId,
-      sortBy = 'created_at',
       sortOrder = 'DESC',
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    const parsedLimit = Math.min(parseInt(limit) || 20, 100);
+    const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     const conditions = [];
     const params = [];
     let i = 1;
 
-    if (status) { conditions.push(`dt.status = $${i++}`); params.push(status); }
-    if (userId) { conditions.push(`dt.requested_by = $${i++}`); params.push(userId); }
+    if (status) {
+      conditions.push(`dt.status = $${i++}`);
+      params.push(status);
+    }
+    if (userId) {
+      conditions.push(`dt.requested_by = $${i++}`);
+      params.push(userId);
+    }
+    if (cursor) {
+      const [cursorTs, cursorId] = cursor.split('__');
+      const op = sortDir === 'DESC' ? '<' : '>';
+      conditions.push(
+        `(dt.created_at, dt.id) ${op} ($${i++}::timestamptz, $${i++}::uuid)`
+      );
+      params.push(cursorTs, cursorId);
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const allowedSort = ['created_at', 'updated_at', 'progress'];
-    const sortField = allowedSort.includes(sortBy) ? sortBy : 'created_at';
-    const sortDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-
-    const countResult = await query(`SELECT COUNT(*) as total FROM download_tasks dt ${where}`, params);
-    const total = parseInt(countResult.rows[0].total);
 
     const tasksResult = await query(
-      `SELECT dt.*, u.username, m.title as media_title
+      `SELECT
+         dt.id,
+         dt.url,
+         dt.status,
+         dt.progress,
+         dt.quality,
+         dt.format,
+         dt.error_message,
+         dt.retry_count,
+         dt.media_id,
+         dt.started_at,
+         dt.completed_at,
+         dt.created_at,
+         u.username,
+         m.title AS media_title
        FROM download_tasks dt
-       LEFT JOIN users u ON dt.requested_by = u.id
-       LEFT JOIN media m ON dt.media_id = m.id
+       LEFT JOIN users u  ON dt.requested_by = u.id
+       LEFT JOIN media m  ON dt.media_id     = m.id
        ${where}
-       ORDER BY dt.${sortField} ${sortDir}
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, limit, offset],
+       ORDER BY dt.created_at ${sortDir}, dt.id ${sortDir}
+       LIMIT $${i}`,
+      [...params, parsedLimit + 1]
     );
+
+    const rows = tasksResult.rows;
+    const hasNextPage = rows.length > parsedLimit;
+    if (hasNextPage) rows.pop();
+
+    const nextCursor = hasNextPage
+      ? `${rows.at(-1).created_at.toISOString()}__${rows.at(-1).id}`
+      : null;
 
     res.json({
       success: true,
       data: {
-        tasks: tasksResult.rows.map((t) => ({
-          id: t.id,
-          url: t.url,
-          status: t.status,
-          progress: t.progress,
-          quality: t.quality,
-          format: t.format,
+        tasks: rows.map((t) => ({
+          id:           t.id,
+          url:          t.url,
+          status:       t.status,
+          progress:     t.progress,
+          quality:      t.quality,
+          format:       t.format,
           errorMessage: t.error_message,
-          retryCount: t.retry_count,
-          username: t.username,
-          mediaTitle: t.media_title,
-          mediaId: t.media_id,
-          startedAt: t.started_at,
-          completedAt: t.completed_at,
-          createdAt: t.created_at,
+          retryCount:   t.retry_count,
+          mediaId:      t.media_id,
+          mediaTitle:   t.media_title,
+          username:     t.username,
+          startedAt:    t.started_at,
+          completedAt:  t.completed_at,
+          createdAt:    t.created_at,
         })),
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / limit),
+          limit:     parsedLimit,
+          nextCursor,
+          hasNextPage,
         },
       },
     });
@@ -463,13 +515,27 @@ async function getDownloadStats() {
 
 async function getStorageStats() {
   try {
-    const mediaPath = process.env.MEDIA_STORAGE_PATH || './media';
-    const tempPath  = process.env.TEMP_DOWNLOAD_PATH  || './temp';
-    const [mediaSize, tempSize] = await Promise.all([getFolderSize(mediaPath), getFolderSize(tempPath)]);
-    return { mediaSize, tempSize, totalSize: mediaSize + tempSize };
+    const result = await query(`
+      SELECT
+        COALESCE(SUM(file_size), 0)                                      AS total_size,
+        COALESCE(SUM(file_size) FILTER (WHERE status = 'completed'), 0)  AS media_size,
+        COUNT(*) FILTER (WHERE status = 'completed')                     AS file_count,
+        COALESCE(AVG(file_size) FILTER (WHERE status = 'completed'), 0)  AS avg_file_size
+      FROM media
+      WHERE file_size IS NOT NULL
+    `);
+
+    const row = result.rows[0];
+    return {
+      totalSize:   parseInt(row.total_size),
+      mediaSize:   parseInt(row.media_size),
+      avgFileSize: parseInt(row.avg_file_size),
+      fileCount:   parseInt(row.file_count),
+      tempSize: 0,
+    };
   } catch (error) {
     logger.error('Error getting storage stats:', error);
-    return { mediaSize: 0, tempSize: 0, totalSize: 0 };
+    return { totalSize: 0, mediaSize: 0, tempSize: 0, avgFileSize: 0, fileCount: 0 };
   }
 }
 

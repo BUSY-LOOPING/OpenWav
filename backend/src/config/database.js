@@ -18,8 +18,6 @@ const dbConfig = {
   maxUses: 7500, // Close (and replace) a connection after it has been used 7500 times
 };   
 
-console.log('dbConfig', dbConfig)
-
 const connectDatabase = async () => {
   try {
 
@@ -32,7 +30,7 @@ const connectDatabase = async () => {
     
     logger.info('PostgreSQL connected successfully');
     return pool;
-  } catch (error) {
+  } catch (error) { 
     logger.error('Database connection failed:', error);
     throw error;
   }

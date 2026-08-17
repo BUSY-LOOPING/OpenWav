@@ -3,7 +3,7 @@ import { logger } from './config/logger.js';
 import { connectDatabase } from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import fs from 'fs-extra';
-import { connectPublisher } from './services/downloadPublisher.js';
+import { connectPublisher } from './config/rabbit.js';
 
 
 const PORT = process.env.PORT || 3000;

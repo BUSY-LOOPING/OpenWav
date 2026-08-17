@@ -10,6 +10,8 @@ import {
   seek,
 } from "../../store/slices/playerSlice";
 
+import { formatTime } from '../../utils/mediaConverter.ts'
+
 import PlayIcon from "../../assets/svg/play.svg?react";
 import PauseIcon from "../../assets/svg/pause.svg?react";
 import SkipPrevIcon from "../../assets/svg/skip_prev.svg?react";
@@ -19,12 +21,6 @@ import RepeatIcon from "../../assets/svg/repeat.svg?react";
 import ShuffleIcon from "../../assets/svg/shuffle.svg?react";
 import ThumbUpIcon from "../../assets/svg/thumb_up.svg?react";
 
-function formatTime(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return "0:00";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 function IconBtn({
   children,

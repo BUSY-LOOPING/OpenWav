@@ -1,5 +1,5 @@
 import { connectRabbit, QUEUE_DOWNLOAD } from './rabbit.js';
-import { processDownloadJob } from './worker.js';
+import { processDownloadJob } from './workers/downloadWorker.js';
 import { logger } from './utils/logger.js';
 import fs from 'fs/promises';
 

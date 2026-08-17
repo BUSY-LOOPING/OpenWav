@@ -58,6 +58,7 @@ export interface GetMediaParams {
 export async function fetchHomeSections(): Promise<HomeSection[]> {
   const { data } = await api.get('/media/home/sections');
   if (!data?.data) throw new Error('Invalid response from /media/home/sections');
+  console.log('fetchHomeSections', data)
   return data.data.sections;
 }
 

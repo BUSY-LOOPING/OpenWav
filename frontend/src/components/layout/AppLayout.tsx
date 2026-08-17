@@ -1,44 +1,33 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useSidebar } from '../../hooks/useSidebar';
+import { useUserPlaylists } from '../../hooks/usePlaylistQueries';
+import { NewPlaylistModal } from '../music/NewPlaylistModal';
 import type { NavSection, Playlist } from '../../types';
 
 const PUBLIC_NAV: NavSection[] = [
   {
     items: [
-      { label: 'Home',    icon: 'home',    href: '/' },
+      { label: 'Home',    icon: 'home',    href: '/',        end: true },
       { label: 'Explore', icon: 'explore', href: '/explore' },
       { label: 'Library', icon: 'library', href: '/library' },
-      { label: 'Upgrade', icon: 'upgrade', href: '/upgrade' },
     ],
   },
-];
-
-const MOCK_PLAYLISTS: Playlist[] = [
-  { id: '1', name: 'Liked music',        owner: 'You',         isPinned: true, isAuto: true },
-  { id: '2', name: 'Mood',               owner: 'Dhruv Yadav' },
-  { id: '3', name: 'Episodes for later', owner: '',            isAuto: true },
-  { id: '4', name: 'Gaming Mix',         owner: 'Dhruv Yadav' },
-  { id: '5', name: 'Study Lofi',         owner: 'Dhruv Yadav' },
 ];
 
 interface AppLayoutProps {
   children: ReactNode;
   playerBar?: ReactNode;
-  activeHref?: string;
-  playlistsLoading?: boolean;
   userName?: string;
 }
 
-export function AppLayout({
-  children,
-  playerBar,
-  activeHref = '/',
-  playlistsLoading = false,
-  userName = 'User',
-}: AppLayoutProps) {
+export function AppLayout({ children, playerBar, userName = 'User' }: AppLayoutProps) {
   const { state, isMobile, toggle, close } = useSidebar();
+  const [showModal, setShowModal] = useState(false);
+  const { data: playlists, isLoading: playlistsLoading } = useUserPlaylists();
+
+  const sidebarPlaylists: Playlist[] = (playlists ?? []);
 
   return (
     <div className="flex flex-col h-screen bg-[#030303] overflow-hidden">
@@ -50,11 +39,11 @@ export function AppLayout({
           isMobile={isMobile}
           onClose={close}
           navSections={PUBLIC_NAV}
-          activeHref={activeHref}
-          playlists={MOCK_PLAYLISTS}
+          playlists={sidebarPlaylists}
           playlistsLoading={playlistsLoading}
           showPlaylists
           showNewPlaylist
+          onNewPlaylist={() => setShowModal(true)}
         />
         <main className="flex-1 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded">
           {children}
@@ -62,8 +51,10 @@ export function AppLayout({
       </div>
 
       {playerBar && (
-        <div className="shrink-0 border-t border-white/[0.06]">{playerBar}</div>
+        <div className="shrink-0">{playerBar}</div>
       )}
+
+      {showModal && <NewPlaylistModal onClose={() => setShowModal(false)} />}
     </div>
   );
 }

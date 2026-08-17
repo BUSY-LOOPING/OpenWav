@@ -1,82 +1,87 @@
 import api from './api';
+import type { ApiResponse } from '../types/api';
+import type {
+  DashboardStats,
+  User,
+  DownloadTask,
+  GlobalSetting,
+  GetUsersParams,
+  GetDownloadTasksParams,
+  UpdateUserPayload,
+  UpdateSettingPayload,
+  UsersResult,
+  DownloadTasksResult,
+  SettingResult,
+} from '../types/admin';
 
 const BASE = '/admin';
 
-export interface PaginationParams {
-  page?: number;
-  limit?: number;
-  sortBy?: string;
-  sortOrder?: 'ASC' | 'DESC';
-}
-
-export interface GetUsersParams extends PaginationParams {
-  search?: string;
-  role?: string;
-  status?: 'active' | 'inactive';
-}
-
-export interface GetDownloadTasksParams extends PaginationParams {
-  status?: string;
-  userId?: string;
-}
-
-export interface UpdateUserPayload {
-  username?: string;
-  email?: string;
-  role?: string;
-  isActive?: boolean;
-}
-
-export interface UpdateSettingPayload {
-  value: string | number | boolean | object;
-  dataType?: 'string' | 'number' | 'boolean' | 'json';
-  description?: string;
-  isPublic?: boolean;
-}
-
-export async function fetchDashboardStats() {
-  const { data } = await api.get(`${BASE}/stats`);
+export async function fetchDashboardStats(): Promise<DashboardStats> {
+  const { data } = await api.get<ApiResponse<DashboardStats>>(`${BASE}/stats`);
   return data.data;
 }
 
-export async function fetchUsers(params: GetUsersParams = {}) {
-    console.log(`fetchUsers url - ${BASE}/users`)
-  const { data } = await api.get(`${BASE}/users`, { params });
-  console.log('fetchUsers data', data)
+export async function fetchUsers(
+  params: GetUsersParams = {}
+): Promise<UsersResult> {
+  const { data } = await api.get<ApiResponse<UsersResult>>(
+    `${BASE}/users`,
+    { params }
+  );
   return data.data;
 }
 
-export async function updateUser(id: string, payload: UpdateUserPayload) {
-  const { data } = await api.put(`${BASE}/users/${id}`, payload);
+export async function updateUser(
+  id: string,
+  payload: UpdateUserPayload
+): Promise<{ user: User }> {
+  const { data } = await api.put<ApiResponse<{ user: User }>>(
+    `${BASE}/users/${id}`,
+    payload
+  );
   return data.data;
 }
 
-export async function deleteUser(id: string) {
-  const { data } = await api.delete(`${BASE}/users/${id}`);
-  return data;
+export async function deleteUser(
+  id: string
+): Promise<{ success: boolean; message: string }> {
+  const { data } = await api.delete<ApiResponse<never>>(`${BASE}/users/${id}`);
+  return { success: data.success, message: data.message ?? '' };
 }
 
-export async function fetchDownloadTasks(params: GetDownloadTasksParams = {}) {
-  const { data } = await api.get(`${BASE}/downloads`, { params });
+export async function fetchDownloadTasks(
+  params: GetDownloadTasksParams = {}
+): Promise<DownloadTasksResult> {
+  const { data } = await api.get<ApiResponse<DownloadTasksResult>>(
+    `${BASE}/downloads`,
+    { params }
+  );
   return data.data;
 }
 
-export async function cancelDownloadTask(id: string) {
-  const { data } = await api.post(`${BASE}/downloads/${id}/cancel`);
-  return data;
+export async function cancelDownloadTask(
+  id: string
+): Promise<{ success: boolean; message: string }> {
+  const { data } = await api.patch<ApiResponse<never>>(
+    `${BASE}/downloads/${id}/cancel`
+  );
+  return { success: data.success, message: data.message ?? '' };
 }
 
-export async function fetchGlobalSettings() {
-  const { data } = await api.get(`${BASE}/settings`);
+
+export async function updateGlobalSetting(
+  key: string,
+  payload: UpdateSettingPayload
+): Promise<SettingResult> {
+  const { data } = await api.put<ApiResponse<SettingResult>>(
+    `${BASE}/settings/${key}`,
+    payload
+  );
+  return data.data;
+}
+export async function fetchGlobalSettings(): Promise<Record<string, GlobalSetting>> {
+  const { data } = await api.get<ApiResponse<{ settings: Record<string, GlobalSetting> }>>(
+    `${BASE}/settings`
+  );
   return data.data.settings;
-}
-
-export async function updateGlobalSetting(key: string, payload: UpdateSettingPayload) {
-  const { data } = await api.put(`${BASE}/settings/${key}`, payload);
-  return data.data;
-}
-
-export async function updateConcurrentDownloads(count: number) {
-  const { data } = await api.put(`${BASE}/settings/concurrent-downloads`, { count });
-  return data.data;
 }

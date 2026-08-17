@@ -17,10 +17,13 @@ import AdminSystemPage from "./routes/admin/AdminSystemPage";
 import AdminUsersPage from "./routes/admin/AdminUsersPage";
 import AdminDownloadsPage from "./routes/admin/AdminDownloadsPage";
 import AdminYtdlpPage from "./routes/admin/AdminYtdlpPage";
+import { useAudioPlayer } from "./hooks/useAudioPlayer";
 
 function AuthInitializer({ children }: { children: React.ReactNode }) {
   const dispatch = useDispatch<AppDispatch>();
-  const { accessToken, user, isInitialized } = useSelector((state: RootState) => state.auth);
+  const { accessToken, user, isInitialized } = useSelector(
+    (state: RootState) => state.auth,
+  );
 
   useEffect(() => {
     if (accessToken && !user) {
@@ -31,9 +34,26 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
   if (!isInitialized) {
     return (
       <div className="h-screen bg-[#030303] flex items-center justify-center">
-        <span className="material-symbols-outlined text-4xl text-[#444] animate-spin">
-          progress_activity
-        </span>
+        <svg
+          className="w-10 h-10 animate-spin text-[#444]"
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeOpacity="0.2"
+          />
+          <path
+            d="M12 2a10 10 0 0 1 10 10"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
       </div>
     );
   }
@@ -42,6 +62,7 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
 }
 
 const AppRoutes = () => {
+  useAudioPlayer();
   const isAuthenticated = useSelector(
     (state: RootState) => state.auth.isAuthenticated,
   );
@@ -85,7 +106,7 @@ const AppRoutes = () => {
         >
           <Route index element={<AdminSystemPage />} />
           <Route path="users" element={<AdminUsersPage />} />
-          <Route path="downloads" element={<AdminDownloadsPage/>} />
+          <Route path="downloads" element={<AdminDownloadsPage />} />
           <Route path="ytdlp" element={<AdminYtdlpPage />} />
         </Route>
       </Routes>

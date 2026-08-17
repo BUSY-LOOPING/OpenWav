@@ -9,6 +9,7 @@ import youtubeRoutes from './youtube.js';
 import chartsRoutes from './charts.js';  
 import playlistsRoutes from './playlists.js'; 
 import artistsRoutes from './artists.js'; 
+import progressRoutes from './progress.js'; 
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.use(`${API_VERSION}/youtube`, youtubeRoutes);
 router.use(`${API_VERSION}/charts`, chartsRoutes);
 router.use(`${API_VERSION}/playlists`, playlistsRoutes);
 router.use(`${API_VERSION}/artists`, artistsRoutes);
+router.use(`${API_VERSION}/progress`, progressRoutes);
 
 router.get('/', (req, res) => {
   res.json({
