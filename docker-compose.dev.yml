@@ -1,27 +1,31 @@
+name: openwav-dev
+
+x-host: &host
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: openwav_postgres_dev
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-openwav}
+      POSTGRES_USER: ${POSTGRES_USER:-openwav}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openwav}
     ports:
-      - "${DB_PORT:-5432}:${DB_PORT:-5432}"
+      - "5432:5432"
     volumes:
       - pgdata_dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: openwav_redis_dev
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     command: ["redis-server", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -30,43 +34,174 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: openwav_rabbitmq_dev
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
-    env_file:
-      - .env.dev
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-openwav}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-openwav}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-openwav}
     ports:
-      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
-      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+      - "5672:5672"
+      - "15672:15672"
+      - "15692:15692"
     volumes:
       - rabbitmqdata_dev:/var/lib/rabbitmq
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 15s
       timeout: 10s
       retries: 5
 
-  minio:
-    image: quay.io/minio/minio:latest
-    container_name: openwav_minio_dev
+  rustfs:
+    image: rustfs/rustfs:latest
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-openwav}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-openwav-secret}
+      RUSTFS_CONSOLE_ENABLE: "true"
     ports:
-      - "${MINIO_API_PORT:-9000}:${MINIO_API_PORT:-9000}"
-      - "${MINIO_CONSOLE_PORT:-9001}:${MINIO_CONSOLE_PORT:-9001}"
-    command: server /data --console-address ":${MINIO_CONSOLE_PORT:-9001}"
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - miniodata_dev:/data
+      - rustfsdata_dev:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_API_PORT:-9000}/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 20s
       retries: 3
 
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+      - "9644:9644"
+    volumes:
+      - redpandadata_dev:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --exit-when-healthy"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.7
+    entrypoint: ["/bin/sh", "/init.sh"]
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      EVENTS_RETENTION_MS: ${EVENTS_RETENTION_MS:-2592000000}
+    volumes:
+      - ./infra/redpanda/init.sh:/init.sh:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  redpanda-console:
+    image: redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8080:8080"
+    depends_on: [redpanda]
+
+  scraper:
+    build:
+      context: ./services/scraper
+      additional_contexts:
+        certs: ./infra/certs
+    environment:
+      REDIS_URL: redis://redis:6379
+      SCRAPER_CACHE_TTL_SEC: ${SCRAPER_CACHE_TTL_SEC:-21600}
+      SCRAPER_TIMEOUT_SEC: ${SCRAPER_TIMEOUT_SEC:-8}
+      SCRAPER_MAX_CONCURRENCY: ${SCRAPER_MAX_CONCURRENCY:-4}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+    ports:
+      - "8100:8100"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  nginx:
+    <<: *host
+    build:
+      context: .
+      additional_contexts:
+        certs: ./infra/certs
+      dockerfile: infra/nginx/Dockerfile.dev
+    environment:
+      STREAM_SIGNING_SECRET: ${STREAM_SIGNING_SECRET:-dev-stream-secret}
+      S3_BUCKET_AUDIO: ${S3_BUCKET_AUDIO:-audio}
+      S3_BUCKET_COVERS: ${S3_BUCKET_COVERS:-covers}
+    ports:
+      - "8443:443"
+    volumes:
+      - nginx_certs_dev:/etc/nginx/certs
+      - nginx_cache_dev:/var/cache/nginx
+    depends_on:
+      rustfs:
+        condition: service_healthy
+
+  prometheus:
+    <<: *host
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/observability/prometheus/prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_SLACK_WEBHOOK_URL: ${ALERT_SLACK_WEBHOOK_URL:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infra/observability/alertmanager/entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - "4318:4318"
+      - "3200:3200"
+    volumes:
+      - ./infra/observability/tempo/tempo.yaml:/etc/tempo.yaml:ro
+
+  loki:
+    image: grafana/loki:3.2.1
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./infra/observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+
 volumes:
   pgdata_dev:
   rabbitmqdata_dev:
-  miniodata_dev:
+  rustfsdata_dev:
+  redpandadata_dev:
+  nginx_certs_dev:
+  nginx_cache_dev:

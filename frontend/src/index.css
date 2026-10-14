@@ -1,11 +1,113 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined');
-
 @import "tailwindcss";
 
-body {
-  font-family: 'Roboto', sans-serif;
+@theme {
+  --color-canvas: #030303;
+  --color-surface: #212121;
+  --color-raised: #2a2a2a;
+  --color-muted: #aaaaaa;
+  --color-accent: #ff0000;
+  --color-line: rgba(255, 255, 255, 0.1);
+  --font-sans: "Roboto", "YouTube Sans", system-ui, sans-serif;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
 
+:root {
+  color-scheme: dark;
+}
 
+input:-webkit-autofill {
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+  box-shadow: 0 0 0 1000px #121212 inset;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: #fff;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+.icon {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  user-select: none;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.icon-fill {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+input[type="range"].range {
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #fff var(--fill, 0%), rgba(255, 255, 255, 0.25) var(--fill, 0%));
+  cursor: pointer;
+}
+
+input[type="range"].range::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #fff;
+}
+
+input[type="range"].range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: #fff;
+}
+
+input[type="range"].seek {
+  background: linear-gradient(to right, var(--color-accent) var(--fill, 0%), rgba(255, 255, 255, 0.2) var(--fill, 0%));
+}
+
+input[type="range"].seek::-webkit-slider-thumb {
+  background: var(--color-accent);
+}
+
+input[type="range"].seek::-moz-range-thumb {
+  background: var(--color-accent);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

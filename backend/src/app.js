@@ -1,193 +1,83 @@
-import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import path from "path";
-import { fileURLToPath } from "url";
-import http from "http";
-import { Server as SocketIo } from "socket.io";
-import { logger } from "./config/logger.js";
-import errorHandler from "./middleware/errorHandler.js";
-import rateLimiter from "./middleware/rateLimiter.js";
-import routes from "./routes/index.js";
-import { getRedisClient } from './config/redis.js';
-import { getRedisSubscriber } from './config/redis.js';
+import { metricsHandler } from '@openwav/shared/metrics';
+import cors from 'cors';
+import express from 'express';
+import helmet from 'helmet';
+import { pinoHttp } from 'pino-http';
+import { createSerializers } from './lib/serializers.js';
+import { createSettings } from './lib/settings.js';
+import { createTokens } from './lib/tokens.js';
+import { createAuth } from './middleware/auth.js';
+import { errorHandler, metricsMiddleware, notFoundHandler } from './middleware/observability.js';
+import { createRateLimiters } from './middleware/rateLimit.js';
+import { adminRoutes } from './routes/admin.js';
+import { authRoutes } from './routes/auth.js';
+import { browseRoutes } from './routes/browse.js';
+import { downloadRoutes } from './routes/downloads.js';
+import { libraryRoutes } from './routes/library.js';
+import { playlistRoutes } from './routes/playlists.js';
+import { searchRoutes } from './routes/search.js';
+import { createDownloadService } from './services/downloads.js';
+import { createEventService } from './services/events.js';
+import { createPlaylistService } from './services/playlists.js';
+import { createProgressHub } from './services/progress.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+export function createApp(external) {
+  const { prisma, config, logger } = external;
+  const settings = external.settings ?? createSettings(prisma);
+  const tokens = createTokens(config);
+  const playlists = createPlaylistService({ prisma });
+  const deps = {
+    ...external,
+    settings,
+    tokens,
+    playlists,
+    serialize: createSerializers(),
+    auth: createAuth({ prisma, tokens }),
+    limits: createRateLimiters({ redis: external.redis, settings }),
+    downloads: createDownloadService({ prisma, settings, channel: external.channel, playlists }),
+    events: createEventService({ prisma, settings, producer: external.producer, logger }),
+    progress: createProgressHub({ subscriber: external.subscriber, logger }),
+  };
 
-const getAllowedOrigins = () => {
-    if (process.env.NODE_ENV === "production" && process.env.FRONTEND_URL) {
-        return [process.env.FRONTEND_URL];
-    }
-    return [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:8080",
-        "http://localhost:6330",
-        "http://10.0.0.220:6330",
-    ];
-};
+  const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', config.TRUST_PROXY);
+  app.use(
+    pinoHttp({
+      logger,
+      genReqId: (req) => req.headers['x-request-id'] ?? crypto.randomUUID(),
+      autoLogging: { ignore: (req) => req.url === '/metrics' || req.url.startsWith('/health') || req.url.startsWith('/api/v1/health') },
+      serializers: {
+        req: (req) => ({ id: req.id, method: req.method, path: req.url.split('?')[0], ip: req.headers['x-real-ip'] ?? req.remoteAddress }),
+        res: (res) => ({ statusCode: res.statusCode }),
+      },
+    }),
+  );
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'same-site' } }));
+  app.use(cors({ origin: config.corsOrigins, credentials: false, maxAge: 600 }));
+  app.use(express.json({ limit: '100kb' }));
+  app.use(metricsMiddleware);
 
-const allowedOrigins = getAllowedOrigins();
+  app.get('/metrics', metricsHandler);
+  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  app.get('/ready', async (_req, res) => {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ready' });
+  });
 
-const app = express();
-const server = http.createServer(app);
+  const api = express.Router();
+  api.get('/health', (_req, res) => res.json({ data: { status: 'ok' } }));
+  api.use('/auth', authRoutes(deps));
+  api.use(deps.auth.optionalAuth, deps.limits.global);
+  api.use('/', browseRoutes(deps));
+  api.use('/search', searchRoutes(deps));
+  api.use('/library', libraryRoutes(deps));
+  api.use('/playlists', playlistRoutes(deps));
+  api.use('/', downloadRoutes(deps));
+  api.use('/admin', adminRoutes(deps));
+  app.use('/api/v1', api);
 
-const io = new SocketIo(server, {
-    cors: {
-        origin: (origin, callback) => {
-            if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, origin);
-            } else {
-                callback(new Error("Not allowed by CORS"));
-            }
-        },
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        credentials: true
-    }
-});
-
-app.set("io", io);
-
-io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
-    socket.on("disconnect", () => {
-        console.log("Client disconnected:", socket.id);
-    });
-});
-
-async function setupRedisSubscriber() {
-    const subscriber = getRedisSubscriber();
-
-    subscriber.on('message', (channel, message) => {
-        if (channel === 'download:progress') {
-            try {
-                const data = JSON.parse(message);
-                io.emit('downloadProgress', data);
-            } catch (err) {
-                logger.error('Failed to parse progress message:', err);
-            }
-        }
-    });
-
-    await subscriber.subscribe('download:progress');
-    logger.info('Redis subscriber listening on download:progress');
+  app.use(notFoundHandler);
+  app.use(errorHandler(logger));
+  return { app, deps };
 }
-
-app.set("trust proxy", 1);
-
-app.use(
-    helmet({
-        crossOriginResourcePolicy: { policy: "cross-origin" },
-        contentSecurityPolicy: {
-            directives: {
-                defaultSrc: ["'self'"],
-                imgSrc: ["'self'", "data:", "blob:", ...allowedOrigins],
-                scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.socket.io"],
-                objectSrc: ["'none'"],
-                styleSrc: ["'self'", "'unsafe-inline'"],
-                fontSrc: ["'self'", "data:", ...allowedOrigins],
-                connectSrc: ["'self'", ...allowedOrigins]
-            }
-        },
-        crossOriginEmbedderPolicy: false,
-        crossOriginOpenerPolicy: false
-    })
-);
-
-
-
-// Unified CORS config for all routes
-const corsOptions = {
-    origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, origin);
-        } else {
-            callback(new Error("Not allowed by CORS"));
-        }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Range"]
-};
-
-// Apply cors to all routes + handle preflight
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
-
-
-// Rate limiting
-// app.use(rateLimiter);
-
-// Body parsers
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// Request logger
-app.use((req, res, next) => {
-    logger.info(`${req.method} ${req.path} - ${req.ip}`);
-    next();
-});
-
-// Health check endpoint
-app.get("/health", (req, res) => {
-    res.status(200).json({
-        status: "OK",
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        environment: process.env.NODE_ENV || "development"
-    });
-});
-
-// API routes
-app.use("/api", routes);
-
-// Static media with basic CORS headers
-app.use(
-    "/media",
-    (req, res, next) => {
-        res.header("Access-Control-Allow-Origin", "*");
-        res.header("Access-Control-Allow-Methods", "GET");
-        res.header("Access-Control-Allow-Headers", "Range");
-        next();
-    },
-    express.static(path.join(__dirname, "../media"), {
-        maxAge: "1d",
-        etag: true,
-        lastModified: true
-    })
-);
-
-// Public folder
-app.use(express.static("public"));
-
-// 404 for API
-app.use("/api/*", (req, res) => {
-    res.status(404).json({
-        success: false,
-        message: "API endpoint not found",
-        path: req.path
-    });
-});
-
-// Root route
-app.get("/", (req, res) => {
-    res.json({
-        message: "Media Streaming API",
-        version: "1.0.0",
-        status: "running",
-        endpoints: {
-            health: "/health",
-            api: "/api",
-            auth: "/api/auth",
-            media: "/api/media",
-            downloads: "/api/downloads",
-            admin: "/api/admin"
-        }
-    });
-});
-
-// Error handler
-app.use(errorHandler);
-
-export { server as server_app, setupRedisSubscriber };

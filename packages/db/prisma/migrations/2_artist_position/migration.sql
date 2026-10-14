@@ -1,0 +1,1 @@
+ALTER TABLE "media_artists" ADD COLUMN "position" INTEGER NOT NULL DEFAULT 0;

@@ -1,0 +1,82 @@
+groups:
+  - name: openwav-thresholds
+    rules:
+      - record: openwav:threshold_p95_seconds
+        expr: vector(0.5)
+      - record: openwav:threshold_p99_seconds
+        expr: vector(1.5)
+      - record: openwav:threshold_error_ratio
+        expr: vector(0.05)
+      - record: openwav:threshold_queue_backlog
+        expr: vector(500)
+      - record: openwav:threshold_download_failure_ratio
+        expr: vector(0.2)
+
+  - name: openwav-latency
+    rules:
+      - record: service:http_request_duration_seconds:p95
+        expr: histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: service:http_request_duration_seconds:p99
+        expr: histogram_quantile(0.99, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: service:http_request_duration_seconds:p50
+        expr: histogram_quantile(0.50, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))
+      - alert: HighLatencyP95
+        expr: service:http_request_duration_seconds:p95 > scalar(openwav:threshold_p95_seconds)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency of {{ $labels.service }} is {{ $value | humanizeDuration }}"
+          description: "P95 HTTP latency has exceeded the P95 threshold for 5 minutes."
+      - alert: HighLatencyP99
+        expr: service:http_request_duration_seconds:p99 > scalar(openwav:threshold_p99_seconds)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "P99 latency of {{ $labels.service }} is {{ $value | humanizeDuration }}"
+          description: "P99 HTTP latency has exceeded the P99 threshold for 5 minutes."
+      - alert: HighErrorRate
+        expr: |
+          sum by (service) (rate(http_request_duration_seconds_count{status_code=~"5.."}[5m]))
+            / sum by (service) (rate(http_request_duration_seconds_count[5m]))
+            > scalar(openwav:threshold_error_ratio)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} 5xx ratio is {{ $value | humanizePercentage }}"
+
+  - name: openwav-availability
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} target {{ $labels.instance }} is down"
+      - alert: DownloadQueueBacklog
+        expr: sum by (queue) (rabbitmq_queue_messages{queue=~"downloads|playlists"}) > scalar(openwav:threshold_queue_backlog)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue {{ $labels.queue }} has {{ $value }} messages waiting"
+      - alert: DownloadFailureRate
+        expr: |
+          sum(rate(download_jobs_total{status="failed"}[15m]))
+            / clamp_min(sum(rate(download_jobs_total[15m])), 1e-9)
+            > scalar(openwav:threshold_download_failure_ratio)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Download failure ratio is {{ $value | humanizePercentage }}"
+      - alert: RecommenderStale
+        expr: increase(recommender_train_duration_seconds_count[2h]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Recommender model has not been retrained in the last 2 hours"

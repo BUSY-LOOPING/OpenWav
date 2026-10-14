@@ -1,0 +1,28 @@
+{
+  "name": "@openwav/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./testing": "./src/testing.js"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "postinstall": "prisma generate",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "pg": "^8.23.1",
+    "prisma": "^7.10.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.4",
+    "@electric-sql/pglite": "^0.5.9",
+    "@electric-sql/pglite-socket": "^0.2.12"
+  }
+}

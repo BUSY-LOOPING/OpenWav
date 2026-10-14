@@ -1,127 +1,98 @@
-import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router";
-import { Provider, useDispatch, useSelector } from "react-redux";
-import { store } from "./store";
-import type { AppDispatch, RootState } from "./store";
-import { getCurrentUser } from "./store/slices/authSlice";
-import Home from "./routes/public/home";
-import Layout from "./routes/public/layout";
-import AdminLayoutRoute from "./routes/admin/layout";
-import Playlist from "./routes/public/playlist";
-import LoginPage from "./routes/LoginPage";
-import SignupPage from "./routes/SignupPage";
-import ProtectedRoute from "./components/ProtectedRoute";
-import "./services/axiosInterceptor";
-import SearchPage from "./routes/public/SearchPage";
-import AdminSystemPage from "./routes/admin/AdminSystemPage";
-import AdminUsersPage from "./routes/admin/AdminUsersPage";
-import AdminDownloadsPage from "./routes/admin/AdminDownloadsPage";
-import AdminYtdlpPage from "./routes/admin/AdminYtdlpPage";
-import { useAudioPlayer } from "./hooks/useAudioPlayer";
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { AppShell } from './components/layout/AppShell';
+import { Toaster } from './components/toast';
+import { Spinner } from './components/ui';
+import { onTokensChange } from './lib/api';
+import Album from './pages/Album';
+import Artist from './pages/Artist';
+import { LoginPage, SignupPage } from './pages/Auth';
+import Explore, { MoodPage } from './pages/Explore';
+import Home from './pages/Home';
+import Library from './pages/Library';
+import NotFound from './pages/NotFound';
+import Playlist from './pages/Playlist';
+import Search from './pages/Search';
+import SettingsPage from './pages/Settings';
+import Watch from './pages/Watch';
+import { loadUser, setUser } from './store/auth';
+import { useAppDispatch, useAppSelector } from './store';
 
-function AuthInitializer({ children }: { children: React.ReactNode }) {
-  const dispatch = useDispatch<AppDispatch>();
-  const { accessToken, user, isInitialized } = useSelector(
-    (state: RootState) => state.auth,
-  );
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
+const Users = lazy(() => import('./pages/admin/Users'));
+const Downloads = lazy(() => import('./pages/admin/Downloads'));
+const Media = lazy(() => import('./pages/admin/Media'));
+const Discovery = lazy(() => import('./pages/admin/Discovery'));
+const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 
-  useEffect(() => {
-    if (accessToken && !user) {
-      dispatch(getCurrentUser());
-    }
-  }, [dispatch, accessToken, user]);
+const loading = <Spinner className="mx-auto mt-24" />;
 
-  if (!isInitialized) {
-    return (
-      <div className="h-screen bg-[#030303] flex items-center justify-center">
-        <svg
-          className="w-10 h-10 animate-spin text-[#444]"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeOpacity="0.2"
-          />
-          <path
-            d="M12 2a10 10 0 0 1 10 10"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
-      </div>
-    );
-  }
-
+export function RequireAuth({ children, role }: { children: ReactNode; role?: 'admin' }) {
+  const { user, status } = useAppSelector((s) => s.auth);
+  const location = useLocation();
+  if (status !== 'ready') return loading;
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (role && user.role !== role) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
-const AppRoutes = () => {
-  useAudioPlayer();
-  const isAuthenticated = useSelector(
-    (state: RootState) => state.auth.isAuthenticated,
-  );
+export default function App() {
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(loadUser());
+    const unsubscribe = onTokensChange((tokens) => {
+      if (!tokens) dispatch(setUser(null));
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [dispatch]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route
-          path="/login"
-          element={
-            isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            isAuthenticated ? <Navigate to="/" replace /> : <SignupPage />
-          }
-        />
-
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Home />} />
-          <Route path="playlist/:id" element={<Playlist />} />
-          <Route path="search" element={<SearchPage />} />
-        </Route>
-
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminLayoutRoute />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<AdminSystemPage />} />
-          <Route path="users" element={<AdminUsersPage />} />
-          <Route path="downloads" element={<AdminDownloadsPage />} />
-          <Route path="ytdlp" element={<AdminYtdlpPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <>
+      <Suspense fallback={loading}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route
+            element={
+              <RequireAuth>
+                <AppShell />
+              </RequireAuth>
+            }
+          >
+            <Route index element={<Home />} />
+            <Route path="explore" element={<Explore />} />
+            <Route path="explore/mood/:mood" element={<MoodPage />} />
+            <Route path="library" element={<Library />} />
+            <Route path="search" element={<Search />} />
+            <Route path="playlist/:id" element={<Playlist />} />
+            <Route path="album/:id" element={<Album />} />
+            <Route path="artist/:id" element={<Artist />} />
+            <Route path="watch/:id" element={<Watch />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth role="admin">
+                <AdminLayout />
+              </RequireAuth>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="users" element={<Users />} />
+            <Route path="downloads" element={<Downloads />} />
+            <Route path="media" element={<Media />} />
+            <Route path="discovery" element={<Discovery />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+        </Routes>
+      </Suspense>
+      <Toaster />
+    </>
   );
-};
-
-const App = () => {
-  return (
-    <Provider store={store}>
-      <AuthInitializer>
-        <AppRoutes />
-      </AuthInitializer>
-    </Provider>
-  );
-};
-
-export default App;
+}

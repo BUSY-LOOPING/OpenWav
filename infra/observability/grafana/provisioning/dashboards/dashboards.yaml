@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: openwav
+    folder: OpenWav
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

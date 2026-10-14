@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  user
+  admin
+
+  @@map("role")
+}
+
+enum MediaStatus {
+  pending
+  downloading
+  completed
+  failed
+  deleted
+
+  @@map("media_status")
+}
+
+enum TaskStatus {
+  queued
+  downloading
+  uploading
+  completed
+  failed
+  cancelled
+
+  @@map("task_status")
+}
+
+enum PlaylistTaskStatus {
+  queued
+  resolving
+  downloading
+  completed
+  failed
+  cancelled
+
+  @@map("playlist_task_status")
+}
+
+model User {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  username      String    @unique @db.VarChar(50)
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  role          Role      @default(user)
+  isActive      Boolean   @default(true) @map("is_active")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  lastLogin     DateTime? @map("last_login") @db.Timestamptz(6)
+  lastSeen      DateTime? @map("last_seen") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  settings          UserSetting[]
+  uploads           Media[]
+  history           UserHistory[]
+  likes             Like[]
+  downloadTasks     DownloadTask[]
+  refreshTokens     RefreshToken[]
+  playlists         Playlist[]
+  addedTracks       PlaylistTrack[]
+  playlistTasks     PlaylistTask[]
+  savedPlaylists    PlaylistSave[]
+  subscriptions     ArtistSubscription[]
+
+  @@index([role])
+  @@index([lastSeen])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model UserSetting {
+  userId    String   @map("user_id") @db.Uuid
+  key       String   @db.VarChar(100)
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+  @@map("user_preferences")
+}
+
+model Setting {
+  key       String   @id @db.VarChar(100)
+  value     Json
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("settings")
+}
+
+model Media {
+  id            String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title         String      @db.VarChar(500)
+  description   String?
+  url           String      @db.VarChar(1000)
+  sourceId      String?     @map("source_id") @db.VarChar(100)
+  platform      String?     @db.VarChar(50)
+  duration      Int?
+  filePath      String?     @map("file_path") @db.VarChar(1000)
+  thumbnailPath String?     @map("thumbnail_path") @db.VarChar(1000)
+  fileSize      BigInt?     @map("file_size")
+  format        String?     @db.VarChar(50)
+  quality       String?     @db.VarChar(20)
+  status        MediaStatus @default(pending)
+  uploadedBy    String?     @map("uploaded_by") @db.Uuid
+  metadata      Json?
+  playCount     Int         @default(0) @map("play_count")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  uploader      User?           @relation(fields: [uploadedBy], references: [id])
+  history       UserHistory[]
+  likes         Like[]
+  downloadTasks DownloadTask[]
+  playlistItems PlaylistTrack[]
+  artists       MediaArtist[]
+  albums        MediaAlbum[]
+
+  @@unique([url, format])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([uploadedBy])
+  @@index([sourceId])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "media_title_trgm_idx")
+  @@map("media")
+}
+
+model UserHistory {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  mediaId       String   @map("media_id") @db.Uuid
+  playCount     Int      @default(1) @map("play_count")
+  watchTime     Int      @default(0) @map("watch_time")
+  totalDuration Int?     @map("total_duration")
+  completed     Boolean  @default(false)
+  lastPosition  Int      @default(0) @map("last_position")
+  playedAt      DateTime @default(now()) @map("played_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  media         Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId])
+  @@index([userId, playedAt(sort: Desc)])
+  @@index([mediaId])
+  @@map("user_history")
+}
+
+model Like {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  mediaId   String   @map("media_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId])
+  @@index([mediaId])
+  @@map("likes")
+}
+
+model DownloadTask {
+  id               String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  url              String        @db.VarChar(1000)
+  requestedBy      String?       @map("requested_by") @db.Uuid
+  status           TaskStatus    @default(queued)
+  progress         Int           @default(0)
+  quality          String?       @db.VarChar(20)
+  format           String?       @db.VarChar(20)
+  errorMessage     String?       @map("error_message")
+  mediaId          String?       @map("media_id") @db.Uuid
+  retryCount       Int           @default(0) @map("retry_count")
+  playlistTaskId   String?       @map("playlist_id") @db.Uuid
+  targetPlaylistId String?       @map("target_playlist_id") @db.Uuid
+  position         Int?
+  startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime?     @map("completed_at") @db.Timestamptz(6)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  media            Media?        @relation(fields: [mediaId], references: [id])
+  requester        User?         @relation(fields: [requestedBy], references: [id])
+  playlistTask     PlaylistTask? @relation(fields: [playlistTaskId], references: [id], onDelete: SetNull)
+  targetPlaylist   Playlist?     @relation(fields: [targetPlaylistId], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+  @@index([requestedBy, createdAt(sort: Desc)])
+  @@index([playlistTaskId])
+  @@index([createdAt(sort: Desc)])
+  @@map("download_tasks")
+}
+
+model PlaylistTask {
+  id               String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  url              String             @db.VarChar(1000)
+  requestedBy      String?            @map("requested_by") @db.Uuid
+  quality          String?            @db.VarChar(20)
+  format           String?            @db.VarChar(20)
+  status           PlaylistTaskStatus @default(queued)
+  totalTracks      Int                @default(0) @map("total_tracks")
+  targetPlaylistId String?            @map("target_playlist_id") @db.Uuid
+  errorMessage     String?            @map("error_message")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  requester        User?              @relation(fields: [requestedBy], references: [id])
+  targetPlaylist   Playlist?          @relation(fields: [targetPlaylistId], references: [id], onDelete: SetNull)
+  tasks            DownloadTask[]
+
+  @@index([requestedBy])
+  @@index([status])
+  @@map("playlist_tasks")
+}
+
+model Artist {
+  id            String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name          String               @db.VarChar(500)
+  slug          String               @unique @db.VarChar(500)
+  imageUrl      String?              @map("image_url")
+  genres        String[]
+  bio           String?
+  metadata      Json?
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  media         MediaArtist[]
+  subscribers   ArtistSubscription[]
+
+  @@index([name])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "artists_name_trgm_idx")
+  @@map("artists")
+}
+
+model MediaArtist {
+  mediaId   String   @map("media_id") @db.Uuid
+  artistId  String   @map("artist_id") @db.Uuid
+  role      String   @default("artist") @db.VarChar(100)
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([mediaId, artistId, role])
+  @@index([artistId])
+  @@map("media_artists")
+}
+
+model Album {
+  id            String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name          String       @db.VarChar(500)
+  slug          String       @unique @db.VarChar(500)
+  coverImageUrl String?      @map("cover_image_url")
+  releaseDate   DateTime?    @map("release_date") @db.Date
+  metadata      Json?
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  media         MediaAlbum[]
+
+  @@index([name])
+  @@map("albums")
+}
+
+model MediaAlbum {
+  mediaId     String   @map("media_id") @db.Uuid
+  albumId     String   @map("album_id") @db.Uuid
+  trackNumber Int?     @map("track_number")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  album       Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([mediaId, albumId])
+  @@index([albumId])
+  @@map("media_albums")
+}
+
+model Playlist {
+  id            String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name          String          @db.VarChar(500)
+  description   String?
+  coverImageUrl String?         @map("cover_image_url")
+  isPublic      Boolean         @default(true) @map("is_public")
+  createdBy     String?         @map("created_by") @db.Uuid
+  totalTracks   Int             @default(0) @map("total_tracks")
+  totalDuration Int             @default(0) @map("total_duration")
+  metadata      Json?
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  owner         User?           @relation(fields: [createdBy], references: [id])
+  tracks        PlaylistTrack[]
+  saves         PlaylistSave[]
+  downloadTasks DownloadTask[]
+  playlistTasks PlaylistTask[]
+
+  @@index([createdBy])
+  @@index([isPublic, createdAt(sort: Desc)])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  playlistId String   @map("playlist_id") @db.Uuid
+  mediaId    String   @map("media_id") @db.Uuid
+  position   Int
+  addedBy    String?  @map("added_by") @db.Uuid
+  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+  adder      User?    @relation(fields: [addedBy], references: [id])
+  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, mediaId])
+  @@index([playlistId, position])
+  @@map("playlist_tracks")
+}
+
+model PlaylistSave {
+  userId     String   @map("user_id") @db.Uuid
+  playlistId String   @map("playlist_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@id([userId, playlistId])
+  @@map("playlist_saves")
+}
+
+model ArtistSubscription {
+  userId    String   @map("user_id") @db.Uuid
+  artistId  String   @map("artist_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@id([userId, artistId])
+  @@map("artist_subscriptions")
+}
