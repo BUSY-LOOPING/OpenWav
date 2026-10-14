@@ -13,9 +13,9 @@ export function createScraper({ baseUrl, redis, ttlSec = 3600 }) {
     return value;
   };
   return {
-    search: (q, limit = 10) =>
-      cached(`scraper:search:${limit}:${q.toLowerCase().trim()}`, () =>
-        fetchJson(`${baseUrl}/search?filter=songs&limit=${limit}&q=${encodeURIComponent(q)}`, { timeoutMs: 10_000 }).then((r) => r.items),
+    search: (q, limit = 10, filter = 'songs') =>
+      cached(`scraper:search:${filter}:${limit}:${q.toLowerCase().trim()}`, () =>
+        fetchJson(`${baseUrl}/search?filter=${filter}&limit=${limit}&q=${encodeURIComponent(q)}`, { timeoutMs: 10_000 }).then((r) => r.items),
       ),
     suggestions: (q) =>
       cached(`scraper:suggest:${q.toLowerCase().trim()}`, () => fetchJson(`${baseUrl}/suggestions?q=${encodeURIComponent(q)}`, { timeoutMs: 3000 }).then((r) => r.items)),

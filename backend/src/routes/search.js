@@ -1,21 +1,20 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { badRequest } from '../lib/errors.js';
 import { validate } from '../lib/http.js';
 import { playlistInclude, tracksByIds } from '../lib/serializers.js';
 
-const TYPES = ['all', 'songs', 'artists', 'albums', 'playlists', 'youtube'];
+const SCOPES = ['online', 'library'];
+const ONLINE = ['songs', 'videos', 'albums', 'artists', 'playlists'];
+const LIBRARY = ['songs', 'artists', 'albums', 'playlists'];
 
 export function searchRoutes({ prisma, auth, serialize, scraper, events, logger }) {
   const router = Router();
   const q = z.string().trim().min(1).max(200);
 
-  router.get('/', auth.optionalAuth, validate({ query: z.object({ q, type: z.enum(TYPES).default('all'), limit: z.coerce.number().int().min(1).max(50).default(20) }) }), async (req, res) => {
-    const { q: term, type, limit } = req.query;
-    const userId = req.user?.id;
-    const want = (t) => type === 'all' || type === t;
+  async function library(term, want, limit, userId) {
     const like = `%${term.replace(/[\\%_]/g, '\\$&')}%`;
-
-    const [songIds, artists, albums, playlists, youtube] = await Promise.all([
+    const [songIds, artists, albums, playlists] = await Promise.all([
       want('songs')
         ? prisma.$queryRaw`
             SELECT m.id FROM media m
@@ -32,35 +31,56 @@ export function searchRoutes({ prisma, auth, serialize, scraper, events, logger 
       want('playlists')
         ? prisma.playlist.findMany({ where: { isPublic: true, name: { contains: term, mode: 'insensitive' } }, take: limit, include: playlistInclude(userId) })
         : [],
-      want('youtube') ? scraper.search(term, Math.min(limit, 20)).catch((err) => (logger.warn({ err: err.message }, 'scraper search failed'), [])) : [],
     ]);
-
     const songs = await tracksByIds(prisma, songIds.map((r) => r.id), userId);
-    const known = youtube.length
-      ? await prisma.media.findMany({ where: { status: 'completed', sourceId: { in: youtube.map((y) => y.videoId) } }, select: { id: true, sourceId: true } })
-      : [];
-    const bySource = new Map(known.map((m) => [m.sourceId, m.id]));
-    if (userId) events.ingest(userId, [{ type: 'search', query: term }]).catch(() => {});
+    return {
+      songs: songs.map(serialize.track),
+      artists: artists.map((a) => serialize.artist(a, userId)),
+      albums: albums.map(serialize.album),
+      playlists: playlists.map((p) => serialize.playlist(p, userId)),
+    };
+  }
 
-    res.json({
-      data: {
-        songs: songs.map(serialize.track),
-        artists: artists.map((a) => serialize.artist(a, userId)),
-        albums: albums.map(serialize.album),
-        playlists: playlists.map((p) => serialize.playlist(p, userId)),
-        youtube: youtube.map((y) => ({
-          videoId: y.videoId,
-          url: y.url,
-          title: y.title,
-          channel: y.channel,
-          thumbnailUrl: y.thumbnailUrl,
-          durationSec: y.durationSec,
-          downloaded: bySource.has(y.videoId),
-          mediaId: bySource.get(y.videoId) ?? null,
-        })),
-      },
-    });
-  });
+  async function online(term, want, limit) {
+    const lists = await Promise.all(
+      ONLINE.map((kind) =>
+        want(kind) ? scraper.search(term, limit, kind).catch((err) => (logger.warn({ err: err.message, kind }, 'scraper search failed'), [])) : [],
+      ),
+    );
+    const result = Object.fromEntries(ONLINE.map((kind, i) => [kind, lists[i]]));
+    const ids = [...result.songs, ...result.videos].map((t) => t.videoId);
+    const known = ids.length ? await prisma.media.findMany({ where: { status: 'completed', sourceId: { in: ids } }, select: { id: true, sourceId: true } }) : [];
+    const bySource = new Map(known.map((m) => [m.sourceId, m.id]));
+    const mark = (t) => ({ ...t, downloaded: bySource.has(t.videoId), mediaId: bySource.get(t.videoId) ?? null });
+    result.songs = result.songs.map(mark);
+    result.videos = result.videos.map(mark);
+    const exactArtist = result.artists.find((a) => a.name.toLowerCase() === term.toLowerCase());
+    result.top = exactArtist ?? result.songs[0] ?? result.videos[0] ?? result.albums[0] ?? null;
+    return result;
+  }
+
+  router.get(
+    '/',
+    auth.optionalAuth,
+    validate({
+      query: z.object({
+        q,
+        scope: z.enum(SCOPES).default('online'),
+        type: z.enum(['all', ...ONLINE]).default('all'),
+        limit: z.coerce.number().int().min(1).max(50).optional(),
+      }),
+    }),
+    async (req, res) => {
+      const { q: term, scope, type } = req.query;
+      const userId = req.user?.id;
+      const want = (t) => type === 'all' || type === t;
+      if (scope === 'library' && type !== 'all' && !LIBRARY.includes(type)) throw badRequest(`Library search has no ${type}`);
+      const limit = req.query.limit ?? (type === 'all' ? 6 : 20);
+      if (userId) events.ingest(userId, [{ type: 'search', query: term }]).catch(() => {});
+      const data = scope === 'online' ? { online: await online(term, want, limit), library: null } : { online: null, library: await library(term, want, limit, userId) };
+      res.json({ data });
+    },
+  );
 
   router.get('/suggestions', auth.optionalAuth, validate({ query: z.object({ q }) }), async (req, res) => {
     const term = req.query.q;

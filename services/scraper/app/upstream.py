@@ -91,6 +91,8 @@ class Upstream:
             raise UpstreamError("yt-dlp returned invalid JSON") from exc
 
     async def search(self, q: str, limit: int, filter: str) -> List[Dict[str, Any]]:
+        if filter in normalize.COLLECTIONS:
+            return normalize.from_collection(await self._ytmusic_call("search", q, filter=filter, limit=limit), filter)[:limit]
         try:
             results = await self._ytmusic_call("search", q, filter=filter, limit=limit)
             items = normalize.from_ytmusic_results(results)

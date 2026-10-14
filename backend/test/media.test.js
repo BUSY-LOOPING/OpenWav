@@ -107,31 +107,49 @@ describe('home, explore and search', () => {
     expect(res.body.data.map((t) => t.id)).toEqual([track.id]);
   });
 
-  it('searches local songs by title or artist and marks scraped results already in the library', async () => {
+  it('searches YouTube Music by default across every type and marks songs already in the library', async () => {
+    const calls = [];
     ctx = buildApp({
       scraper: {
-        search: async () => [
-          { videoId: track.sourceId, url: track.url, title: 'Blinding Lights', channel: 'The Weeknd', thumbnailUrl: null, durationSec: 200 },
-          { videoId: 'fresh', url: 'https://www.youtube.com/watch?v=fresh', title: 'New', channel: 'X', thumbnailUrl: null, durationSec: null },
-        ],
+        search: async (q, limit, kind) => {
+          calls.push([kind, limit]);
+          if (kind === 'songs') return [
+            { type: 'song', videoId: track.sourceId, url: track.url, title: 'Blinding Lights', channel: 'The Weeknd', thumbnailUrl: null, durationSec: 200 },
+            { type: 'song', videoId: 'fresh', url: 'https://www.youtube.com/watch?v=fresh', title: 'New', channel: 'X', thumbnailUrl: null, durationSec: null },
+          ];
+          if (kind === 'artists') return [{ type: 'artist', browseId: 'UC1', name: 'The Weeknd', thumbnailUrl: 'https://img', url: 'https://music.youtube.com/channel/UC1' }];
+          return [];
+        },
         suggestions: async () => ['blinding lights remix'],
         health: async () => ({}),
       },
     });
-    const byArtist = await ctx.request.get('/api/v1/search?q=weeknd').set(bearer(ctx.deps, user));
-    expect(byArtist.body.data.songs.map((s) => s.id)).toEqual([track.id]);
-    expect(byArtist.body.data.youtube.map((y) => [y.videoId, y.downloaded, y.mediaId])).toEqual([
+    const res = await ctx.request.get('/api/v1/search?q=the weeknd').set(bearer(ctx.deps, user));
+    expect(res.body.data.library).toBeNull();
+    expect(calls.map((c) => c[0]).sort()).toEqual(['albums', 'artists', 'playlists', 'songs', 'videos']);
+    expect(res.body.data.online.top).toMatchObject({ type: 'artist', name: 'The Weeknd' });
+    expect(res.body.data.online.songs.map((y) => [y.videoId, y.downloaded, y.mediaId])).toEqual([
       [track.sourceId, true, track.id],
       ['fresh', false, null],
     ]);
+
+    calls.length = 0;
+    await ctx.request.get('/api/v1/search?q=weeknd&type=songs');
+    expect(calls).toEqual([['songs', 20]]);
+
+    const lib = await ctx.request.get('/api/v1/search?q=weeknd&scope=library').set(bearer(ctx.deps, user));
+    expect(lib.body.data.online).toBeNull();
+    expect(lib.body.data.library.songs.map((s) => s.id)).toEqual([track.id]);
+    expect((await ctx.request.get('/api/v1/search?q=weeknd&scope=library&type=videos')).status).toBe(400);
+
     const suggest = await ctx.request.get('/api/v1/search/suggestions?q=blind');
     expect(suggest.body.data).toEqual(['Blinding Lights', 'blinding lights remix']);
   });
 
   it('keeps working when the scraper fails', async () => {
     ctx = buildApp({ scraper: { search: async () => Promise.reject(new Error('blocked')), suggestions: async () => [], health: async () => ({}) } });
-    const res = await ctx.request.get('/api/v1/search?q=blinding&type=youtube');
+    const res = await ctx.request.get('/api/v1/search?q=blinding');
     expect(res.status).toBe(200);
-    expect(res.body.data.youtube).toEqual([]);
+    expect(res.body.data.online).toMatchObject({ songs: [], videos: [], albums: [], artists: [], playlists: [], top: null });
   });
 });

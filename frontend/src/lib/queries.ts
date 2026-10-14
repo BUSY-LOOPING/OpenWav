@@ -19,6 +19,7 @@ import type {
   Playlist,
   PlaylistDetail,
   SearchResults,
+  SearchScope,
   SearchType,
   Section,
   Settings,
@@ -37,7 +38,7 @@ export const keys = {
   artist: (id: string) => ['artist', id],
   album: (id: string) => ['album', id],
   playlist: (id: string) => ['playlist', id],
-  search: (q: string, type: SearchType) => ['search', q, type],
+  search: (q: string, scope: SearchScope, type: SearchType) => ['search', q, scope, type],
   suggestions: (q: string) => ['suggestions', q],
   library: (kind: string) => ['library', kind],
   myPlaylists: ['library', 'playlists'],
@@ -76,8 +77,8 @@ export function usePaged<T>(key: unknown[], url: string, params: Record<string, 
 export const useLiked = () => usePaged<Track>(keys.library('liked'), '/library/liked');
 export const useHistory = () => usePaged<HistoryTrack>(keys.library('history'), '/library/history');
 
-export const useSearch = (q: string, type: SearchType) =>
-  useQuery({ queryKey: keys.search(q, type), queryFn: () => get<SearchResults>('/search', { q, type }), enabled: q.trim().length > 0 });
+export const useSearch = (q: string, scope: SearchScope, type: SearchType) =>
+  useQuery({ queryKey: keys.search(q, scope, type), queryFn: () => get<SearchResults>('/search', { q, scope, type }), enabled: q.trim().length > 0, staleTime: 5 * 60_000 });
 export const useSuggestions = (q: string) =>
   useQuery({
     queryKey: keys.suggestions(q),
