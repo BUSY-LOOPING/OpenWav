@@ -111,7 +111,7 @@ def create_app(upstream: Optional[Upstream] = None, redis: Any = None) -> FastAP
     async def search(
         q: str = Query(..., min_length=1, max_length=200),
         limit: int = Query(10, ge=1, le=50),
-        filter: Literal["songs", "videos"] = "songs",
+        filter: Literal["songs", "videos", "albums", "artists", "playlists"] = "songs",
     ):
         term = q.strip()
         key = f"scraper:search:{filter}:{limit}:{term.lower()}"
@@ -126,6 +126,10 @@ def create_app(upstream: Optional[Upstream] = None, redis: Any = None) -> FastAP
     async def artist(q: str = Query(..., min_length=1, max_length=200)):
         term = q.strip()
         return {"item": await cache.get_or_set(f"scraper:artist:{term.lower()}", lambda: upstream.artist(term), logger)}
+
+    @app.get("/related")
+    async def related(videoId: str = Query(..., pattern="^[A-Za-z0-9_-]{6,20}$")):
+        return {"items": await cache.get_or_set(f"scraper:related:{videoId}", lambda: upstream.related(videoId), logger)}
 
     @app.get("/charts")
     async def charts(country: str = Query("ZZ", pattern="^[A-Za-z]{2}$")):

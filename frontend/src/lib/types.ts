@@ -92,14 +92,64 @@ export interface AlbumDetail extends Album {
 }
 
 export interface YoutubeResult {
+  type: 'song' | 'video';
   videoId: string;
   url: string;
   title: string;
   channel: string;
-  thumbnailUrl: string;
+  artists?: string[];
+  album?: string | null;
+  views?: string | null;
+  thumbnailUrl: string | null;
   durationSec: number | null;
   downloaded: boolean;
   mediaId: string | null;
+}
+
+export interface OnlineAlbum {
+  type: 'album';
+  browseId: string;
+  playlistId: string | null;
+  title: string;
+  artists: string[];
+  year: string | null;
+  albumType: string | null;
+  thumbnailUrl: string | null;
+  url: string | null;
+}
+
+export interface OnlineArtist {
+  type: 'artist';
+  browseId: string;
+  name: string;
+  thumbnailUrl: string | null;
+  url: string;
+}
+
+export interface OnlinePlaylist {
+  type: 'playlist';
+  playlistId: string;
+  title: string;
+  author: string | null;
+  itemCount: string | null;
+  thumbnailUrl: string | null;
+  url: string;
+}
+
+export interface OnlineResults {
+  top: YoutubeResult | OnlineAlbum | OnlineArtist | null;
+  songs: YoutubeResult[];
+  videos: YoutubeResult[];
+  albums: OnlineAlbum[];
+  artists: OnlineArtist[];
+  playlists: OnlinePlaylist[];
+}
+
+export interface LibraryResults {
+  songs: Track[];
+  artists: Artist[];
+  albums: Album[];
+  playlists: Playlist[];
 }
 
 export type Section =
@@ -114,15 +164,18 @@ export interface Explore {
   genres: string[];
 }
 
-export interface SearchResults {
-  songs: Track[];
-  artists: Artist[];
-  albums: Album[];
-  playlists: Playlist[];
-  youtube: YoutubeResult[];
+export interface RelatedResults {
+  library: Track[];
+  online: YoutubeResult[];
 }
 
-export type SearchType = 'all' | 'songs' | 'artists' | 'albums' | 'playlists' | 'youtube';
+export interface SearchResults {
+  online: OnlineResults | null;
+  library: LibraryResults | null;
+}
+
+export type SearchScope = 'online' | 'library';
+export type SearchType = 'all' | 'songs' | 'videos' | 'albums' | 'artists' | 'playlists';
 
 export type TaskStatus = 'queued' | 'downloading' | 'uploading' | 'completed' | 'failed' | 'cancelled';
 

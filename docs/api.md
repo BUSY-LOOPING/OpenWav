@@ -15,7 +15,7 @@ Track     { id, title, artists: ArtistRef[], album: AlbumRef | null, durationSec
 Playlist  { id, name, description, isPublic, owner: { id, username } | null, trackCount, durationSec, coverUrls: string[], isOwner, saved, createdAt }
 Artist    { id, name, imageUrl, subscribed, subscriberCount }
 Album     { id, name, coverUrl, releaseYear: number | null, artists: ArtistRef[] }
-YoutubeResult { videoId, url, title, channel, thumbnailUrl, durationSec: number | null, downloaded: boolean, mediaId: string | null }
+YoutubeResult { type: 'song' | 'video', videoId, url, title, channel, artists, album, views, thumbnailUrl, durationSec: number | null, downloaded: boolean, mediaId: string | null }
 Section   { id, title, subtitle: string | null, kind: 'quick_picks' | 'tracks' | 'playlists' | 'artists', items: Track[] | Playlist[] | Artist[] }
 Task      { id, url, status: 'queued'|'downloading'|'uploading'|'completed'|'failed'|'cancelled', progress, title, mediaId, errorMessage, retryCount, createdAt, playlistTaskId }
 ```
@@ -38,7 +38,7 @@ Password: 8–128 chars, at least one letter and one digit.
 | GET | /explore | | `{ newReleases: Track[], charts: Track[], moods: string[], genres: string[] }` |
 | GET | /explore/moods/:mood | | `Track[]` (mood or genre label, case-insensitive) |
 | GET | /media/:id | | `Track` |
-| GET | /media/:id/related | | `Track[]` |
+| GET | /media/:id/related | | `{ library: Track[], online: YoutubeResult[] }`. `library` ranks your tracks by shared artist, then shared tags, then the recommender. `online` is the YouTube Music radio for the track (from the scraper's `/related`), with `downloaded`/`mediaId` set when a song is already in the library. |
 | GET | /media/:id/lyrics | | `{ plain: string | null, synced: string | null }` |
 | POST | /media/:id/stream | | `{ url, expiresAt }` signed nginx URL, supports Range |
 | PUT/DELETE | /media/:id/like | | `{ liked }` |
@@ -47,7 +47,7 @@ Password: 8–128 chars, at least one letter and one digit.
 | GET | /albums/:id | | `Album & { tracks: Track[] }` |
 
 ## Search
-| GET | /search?q=&type=all\|songs\|artists\|albums\|playlists\|youtube | | `{ songs: Track[], artists: Artist[], albums: Album[], playlists: Playlist[], youtube: YoutubeResult[] }` (types not requested are `[]`) |
+| GET | /search?q=&scope=online\|library&type=all\|songs\|videos\|albums\|artists\|playlists&limit= | | `{ online: { top, songs, videos, albums, artists, playlists } \| null, library: { songs: Track[], artists: Artist[], albums: Album[], playlists: Playlist[] } \| null }`. `scope` defaults to `online` (YouTube Music through the scraper); songs and videos are marked `downloaded`/`mediaId` when already in the library. Online albums and playlists carry an importable `url` for `POST /playlists/import`. `limit` defaults to 6 per type for `all`, otherwise 20. |
 | GET | /search/suggestions?q= | | `string[]` |
 
 ## Library

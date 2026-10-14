@@ -33,8 +33,18 @@ export function onTokensChange(listener: Listener) {
 
 export const api = axios.create({ baseURL: API_URL });
 
-api.interceptors.request.use((config) => {
-  const tokens = getTokens();
+export function expiresSoon(accessToken: string, now = Date.now(), marginMs = 30_000) {
+  try {
+    const { exp } = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof exp === 'number' && exp * 1000 - now < marginMs;
+  } catch {
+    return false;
+  }
+}
+
+api.interceptors.request.use(async (config) => {
+  let tokens = getTokens();
+  if (tokens && !config.url?.startsWith('/auth/') && expiresSoon(tokens.accessToken)) tokens = await refreshTokens();
   if (tokens) config.headers.Authorization = `Bearer ${tokens.accessToken}`;
   return config;
 });

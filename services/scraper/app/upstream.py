@@ -17,6 +17,26 @@ class UpstreamError(Exception):
     pass
 
 
+def radio_tracks(client: Any, video_id: str) -> List[Dict[str, Any]]:
+    try:
+        return client.get_watch_playlist(videoId=video_id, limit=25)["tracks"]
+    except KeyError:
+        from ytmusicapi.navigation import TAB_CONTENT, nav
+        from ytmusicapi.parsers.watch import parse_watch_playlist
+
+        body = {
+            "enablePersistentPlaylistPanel": True,
+            "isAudioOnly": True,
+            "tunerSettingValue": "AUTOMIX_SETTING_NORMAL",
+            "videoId": video_id,
+            "playlistId": f"RDAMVM{video_id}",
+        }
+        response = client._send_request("next", body)
+        renderer = nav(response, ["contents", "singleColumnMusicWatchNextResultsRenderer", "tabbedRenderer", "watchNextTabbedResultsRenderer"], True)
+        results = nav(renderer, [*TAB_CONTENT, "musicQueueRenderer", "content", "playlistPanelRenderer"], True) if renderer else None
+        return parse_watch_playlist(results["contents"]) if results else []
+
+
 def is_retryable(exc: BaseException) -> bool:
     return isinstance(exc, asyncio.TimeoutError) or bool(RETRYABLE.search(str(exc)))
 
@@ -49,13 +69,14 @@ class Upstream:
             self._ytmusic = self.ytmusic_factory()
         return self._ytmusic
 
-    def _invoke(self, method: str, args, kwargs):
+    def _invoke(self, method: Any, args, kwargs):
         try:
-            return getattr(self._client(), method)(*args, **kwargs)
+            client = self._client()
+            return method(client, *args, **kwargs) if callable(method) else getattr(client, method)(*args, **kwargs)
         except StopIteration as exc:
             raise UpstreamError(f"{method} returned an unexpected page shape") from exc
 
-    async def _ytmusic_call(self, method: str, *args, **kwargs):
+    async def _ytmusic_call(self, method: Any, *args, **kwargs):
         attempt = 0
         while True:
             try:
@@ -91,6 +112,8 @@ class Upstream:
             raise UpstreamError("yt-dlp returned invalid JSON") from exc
 
     async def search(self, q: str, limit: int, filter: str) -> List[Dict[str, Any]]:
+        if filter in normalize.COLLECTIONS:
+            return normalize.from_collection(await self._ytmusic_call("search", q, filter=filter, limit=limit), filter)[:limit]
         try:
             results = await self._ytmusic_call("search", q, filter=filter, limit=limit)
             items = normalize.from_ytmusic_results(results)
@@ -102,6 +125,9 @@ class Upstream:
 
     async def artist(self, name: str) -> Optional[Dict[str, Any]]:
         return normalize.artist_match(await self._ytmusic_call("search", name, filter="artists", limit=5), name)
+
+    async def related(self, video_id: str) -> List[Dict[str, Any]]:
+        return normalize.from_watch(await self._ytmusic_call(radio_tracks, video_id), video_id)
 
     async def suggestions(self, q: str) -> List[str]:
         results = await self._ytmusic_call("get_search_suggestions", q)

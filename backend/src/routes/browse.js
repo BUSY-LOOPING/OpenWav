@@ -52,7 +52,7 @@ export const GENRES = {
 
 const MOOD_TAGS = new Map(Object.entries({ ...MOODS, ...GENRES }).map(([label, tags]) => [label.toLowerCase(), tags]));
 
-export function browseRoutes({ prisma, auth, serialize, settings, recommender, lyrics, config, logger }) {
+export function browseRoutes({ prisma, auth, serialize, settings, recommender, scraper, lyrics, config, logger }) {
   const router = Router();
   const tracks = (rows) => rows.map(serialize.track);
   const completed = { status: 'completed' };
@@ -131,20 +131,28 @@ export function browseRoutes({ prisma, auth, serialize, settings, recommender, l
   router.get('/media/:id/related', auth.optionalAuth, validate({ params: uuidParam }), async (req, res) => {
     const userId = req.user?.id;
     const media = await findTrack(req.params.id, userId);
-    let related = [];
-    if (await settings.get('recommender.enabled')) {
-      related = await recommender.similar(media.id, 25).then((ids) => tracksByIds(prisma, ids, userId)).catch(() => []);
-    }
-    if (!related.length) {
-      const artistIds = media.artists.map((a) => a.artist.id);
-      related = await prisma.media.findMany({
-        where: { ...completed, id: { not: media.id }, ...(artistIds.length ? { artists: { some: { artistId: { in: artistIds } } } } : {}) },
-        orderBy: { playCount: 'desc' },
-        take: 25,
-        include: trackInclude(userId),
-      });
-    }
-    res.json({ data: tracks(related.filter((t) => t.id !== media.id)) });
+    const artistIds = media.artists.map((a) => a.artist.id);
+    const tags = (Array.isArray(media.metadata?.tags) ? media.metadata.tags : []).map((t) => String(t).toLowerCase());
+    const [matched, similar, online] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT m.id FROM (
+          SELECT m.id, m.play_count,
+            3 * (SELECT count(*) FROM media_artists ma WHERE ma.media_id = m.id AND ma.artist_id = ANY(${artistIds}::uuid[]))
+            + (SELECT count(*) FROM jsonb_array_elements_text(coalesce(m.metadata->'tags', '[]'::jsonb)) t WHERE lower(t) = ANY(${tags}::text[])) AS score
+          FROM media m WHERE m.status = 'completed' AND m.id <> ${media.id}::uuid
+        ) m WHERE m.score > 0 ORDER BY m.score DESC, m.play_count DESC LIMIT 25`,
+      (await settings.get('recommender.enabled')) ? recommender.similar(media.id, 25).catch(() => []) : [],
+      media.sourceId ? scraper.related(media.sourceId).catch((err) => (logger.warn({ err: err.message }, 'related scrape failed'), [])) : [],
+    ]);
+    const ids = [...new Set([...matched.map((r) => r.id), ...similar])].filter((id) => id !== media.id).slice(0, 25);
+    const known = online.length ? await prisma.media.findMany({ where: { ...completed, sourceId: { in: online.map((t) => t.videoId) } }, select: { id: true, sourceId: true } }) : [];
+    const bySource = new Map(known.map((m) => [m.sourceId, m.id]));
+    res.json({
+      data: {
+        library: tracks(await tracksByIds(prisma, ids, userId)),
+        online: online.map((t) => ({ ...t, downloaded: bySource.has(t.videoId), mediaId: bySource.get(t.videoId) ?? null })),
+      },
+    });
   });
 
   router.get('/media/:id/lyrics', auth.optionalAuth, validate({ params: uuidParam }), async (req, res) => {

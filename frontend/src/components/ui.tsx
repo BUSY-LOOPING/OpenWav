@@ -36,22 +36,25 @@ export function Thumb({
   className = '',
   rounded = 'rounded',
   icon = 'music_note',
+  fallback,
 }: {
   src: string | null | undefined;
   alt?: string;
   className?: string;
   rounded?: string;
   icon?: string;
+  fallback?: string | null;
 }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const url = [src, fallback].find((u): u is string => !!u && !failed.includes(u));
+  if (!url) {
     return (
       <div className={`flex items-center justify-center bg-raised text-white/30 ${rounded} ${className}`}>
         <Icon name={icon} />
       </div>
     );
   }
-  return <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} className={`object-cover ${rounded} ${className}`} />;
+  return <img src={url} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed((f) => [...f, url])} className={`object-cover ${rounded} ${className}`} />;
 }
 
 export function Chips<T extends string>({

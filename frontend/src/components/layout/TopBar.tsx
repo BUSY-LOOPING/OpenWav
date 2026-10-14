@@ -54,7 +54,7 @@ export function SearchBox({ onDone, autoFocus = false }: { onDone?: () => void; 
         go(active >= 0 ? shown[active] : value);
       }}
     >
-      <div className="flex items-center rounded-lg bg-white/10 focus-within:bg-white/15">
+      <div className="flex items-center rounded-lg bg-white/10 transition-colors focus-within:bg-black">
         <Icon name="search" className="ml-3 text-muted" />
         <input
           id="global-search"
@@ -82,12 +82,12 @@ export function SearchBox({ onDone, autoFocus = false }: { onDone?: () => void; 
           aria-autocomplete="list"
           aria-label="Search songs, albums, artists"
           placeholder="Search songs, albums, artists, podcasts"
-          className="h-10 w-full bg-transparent px-3 text-sm outline-none placeholder:text-muted"
+          className="h-10 w-full bg-transparent px-3 text-sm outline-none focus-visible:outline-none placeholder:text-muted"
         />
         {value && <IconButton icon="close" label="Clear search" onClick={() => setValue('')} className="mr-1 text-muted" />}
       </div>
       {shown.length > 0 && (
-        <ul id="search-suggestions" role="listbox" className="absolute inset-x-0 top-11 z-50 rounded-lg border border-white/10 bg-surface py-2 shadow-2xl">
+        <ul id="search-suggestions" role="listbox" className="absolute inset-x-0 top-11 z-50 rounded-lg bg-surface py-2 shadow-2xl">
           {shown.map((s, i) => (
             <li key={s} role="option" aria-selected={i === active}>
               <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => go(s)} className={`flex w-full items-center gap-4 px-4 py-2 text-left text-sm hover:bg-white/10 ${i === active ? 'bg-white/10' : ''}`}>

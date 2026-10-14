@@ -30,6 +30,15 @@ class FakeYTMusic:
             ]
         return self._search
 
+    def get_watch_playlist(self, videoId=None, limit=None):
+        self.calls.append(("watch", videoId))
+        if self._error:
+            raise self._error
+        return {"tracks": [
+            {"videoId": videoId, "title": "Seed", "artists": [{"name": "A"}], "length": "3:00", "thumbnail": []},
+            {"videoId": "next1", "title": "Next", "artists": [{"name": "B"}], "length": "2:05", "thumbnail": [{"url": "https://yt3.googleusercontent.com/n=w60-h60-l90", "width": 60, "height": 60}], "views": "1M"},
+        ]}
+
     def get_search_suggestions(self, q):
         self.calls.append(("suggest", q))
         return ["one", "two", {"not": "a string"}]
@@ -79,6 +88,8 @@ def test_search_returns_normalised_items_and_caches():
         "album": "Album",
         "thumbnailUrl": "t",
         "durationSec": 180,
+        "type": "song",
+        "views": None,
     }
     assert second.json() == first.json()
     assert yt.calls == [("search", "Song", "songs", 5)]
@@ -108,6 +119,8 @@ def test_search_falls_back_to_ytdlp(tmp_path):
             "album": None,
             "thumbnailUrl": "https://i.ytimg.com/vi/v1/hqdefault.jpg",
             "durationSec": 61,
+            "type": "song",
+            "views": None,
         }
     ]
 
@@ -121,7 +134,7 @@ def test_search_returns_502_when_both_upstreams_fail(tmp_path):
 
 @pytest.mark.parametrize(
     "params",
-    [{"q": ""}, {"q": "x" * 201}, {"q": "x", "limit": 0}, {"q": "x", "limit": 51}, {"q": "x", "filter": "albums"}, {}],
+    [{"q": ""}, {"q": "x" * 201}, {"q": "x", "limit": 0}, {"q": "x", "limit": 51}, {"q": "x", "filter": "podcasts"}, {}],
 )
 def test_search_validation(params):
     assert client_for(FakeYTMusic()).get("/search", params=params).status_code == 422
@@ -201,5 +214,35 @@ def test_stop_iteration_from_scraper_becomes_upstream_error():
 def test_artist_prefers_exact_name_and_upsizes_thumbnail():
     yt = FakeYTMusic()
     body = client_for(yt).get("/artist", params={"q": "taylor swift"}).json()
-    assert body["item"] == {"name": "Taylor Swift", "browseId": "UC1", "thumbnailUrl": "https://lh3.googleusercontent.com/a=w544-h544-l90"}
+    assert body["item"] == {"type": "artist", "name": "Taylor Swift", "browseId": "UC1", "thumbnailUrl": "https://lh3.googleusercontent.com/a=w544-h544-l90", "url": "https://music.youtube.com/channel/UC1"}
     assert yt.calls == [("search", "taylor swift", "artists", 5)]
+
+
+def test_search_collections_without_ytdlp_fallback():
+    yt = FakeYTMusic()
+    client = client_for(yt)
+    artists = client.get("/search", params={"q": "taylor", "filter": "artists"}).json()["items"]
+    assert [a["name"] for a in artists] == ["Taylor Swift Tribute", "Taylor Swift"]
+    assert client.get("/search", params={"q": "x", "filter": "podcasts"}).status_code == 422
+
+
+def test_related_returns_the_radio_without_the_seed_track():
+    yt = FakeYTMusic()
+    client = client_for(yt)
+    items = client.get("/related", params={"videoId": "seed123"}).json()["items"]
+    assert [(i["videoId"], i["durationSec"], i["thumbnailUrl"]) for i in items] == [("next1", 125, "https://yt3.googleusercontent.com/n=w544-h544-l90")]
+    assert client.get("/related", params={"videoId": "bad id!"}).status_code == 422
+
+
+def test_related_falls_back_when_the_related_tab_breaks_the_library_parser():
+    class Broken(FakeYTMusic):
+        def get_watch_playlist(self, videoId=None, limit=None):
+            raise KeyError("endpoint")
+
+        def _send_request(self, endpoint, body):
+            self.calls.append((endpoint, body["playlistId"]))
+            return {}
+
+    yt = Broken()
+    assert client_for(yt).get("/related", params={"videoId": "seed123"}).json() == {"items": []}
+    assert yt.calls == [("next", "RDAMVMseed123")]

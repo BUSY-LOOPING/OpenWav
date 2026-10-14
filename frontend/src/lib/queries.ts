@@ -18,7 +18,9 @@ import type {
   Lyrics,
   Playlist,
   PlaylistDetail,
+  RelatedResults,
   SearchResults,
+  SearchScope,
   SearchType,
   Section,
   Settings,
@@ -37,7 +39,7 @@ export const keys = {
   artist: (id: string) => ['artist', id],
   album: (id: string) => ['album', id],
   playlist: (id: string) => ['playlist', id],
-  search: (q: string, type: SearchType) => ['search', q, type],
+  search: (q: string, scope: SearchScope, type: SearchType) => ['search', q, scope, type],
   suggestions: (q: string) => ['suggestions', q],
   library: (kind: string) => ['library', kind],
   myPlaylists: ['library', 'playlists'],
@@ -51,7 +53,7 @@ export const useExplore = () => useQuery({ queryKey: keys.explore, queryFn: () =
 export const useMood = (mood: string) =>
   useQuery({ queryKey: keys.mood(mood), queryFn: () => get<Track[]>(`/explore/moods/${encodeURIComponent(mood)}`) });
 export const useRelated = (id: string | undefined) =>
-  useQuery({ queryKey: keys.related(id ?? ''), queryFn: () => get<Track[]>(`/media/${id}/related`), enabled: !!id });
+  useQuery({ queryKey: keys.related(id ?? ''), queryFn: () => get<RelatedResults>(`/media/${id}/related`), enabled: !!id, staleTime: 10 * 60_000 });
 export const useLyrics = (id: string | undefined) =>
   useQuery({ queryKey: keys.lyrics(id ?? ''), queryFn: () => get<Lyrics>(`/media/${id}/lyrics`), enabled: !!id, retry: false });
 export const useArtist = (id: string) => useQuery({ queryKey: keys.artist(id), queryFn: () => get<ArtistDetail>(`/artists/${id}`) });
@@ -76,8 +78,8 @@ export function usePaged<T>(key: unknown[], url: string, params: Record<string, 
 export const useLiked = () => usePaged<Track>(keys.library('liked'), '/library/liked');
 export const useHistory = () => usePaged<HistoryTrack>(keys.library('history'), '/library/history');
 
-export const useSearch = (q: string, type: SearchType) =>
-  useQuery({ queryKey: keys.search(q, type), queryFn: () => get<SearchResults>('/search', { q, type }), enabled: q.trim().length > 0 });
+export const useSearch = (q: string, scope: SearchScope, type: SearchType) =>
+  useQuery({ queryKey: keys.search(q, scope, type), queryFn: () => get<SearchResults>('/search', { q, scope, type }), enabled: q.trim().length > 0, staleTime: 5 * 60_000 });
 export const useSuggestions = (q: string) =>
   useQuery({
     queryKey: keys.suggestions(q),

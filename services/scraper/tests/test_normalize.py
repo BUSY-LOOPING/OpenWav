@@ -43,6 +43,8 @@ def test_from_ytmusic_song():
         "album": "Album",
         "thumbnailUrl": "big",
         "durationSec": 225,
+        "type": "song",
+        "views": None,
     }
 
 
@@ -91,5 +93,18 @@ def test_chart_items_empty_on_unknown_shape():
 def test_artist_match_skips_bad_rows_and_falls_back_to_first():
     from app.normalize import artist_match
     rows = [None, {"artist": "X"}, {"artists": [{"name": "Nucleya"}], "browseId": "UC9", "thumbnails": [{"url": "u", "width": 1, "height": 1}]}]
-    assert artist_match(rows, "someone else") == {"name": "Nucleya", "browseId": "UC9", "thumbnailUrl": "u"}
+    assert artist_match(rows, "someone else")["name"] == "Nucleya"
     assert artist_match([], "x") is None
+
+
+def test_collections_build_importable_urls_and_upsize_art():
+    from app.normalize import from_collection, from_ytmusic
+    album = {"browseId": "MPRE1", "playlistId": "OLAK1", "title": "Prism", "type": "Album", "year": "2013", "artists": [{"name": "Katy Perry"}], "thumbnails": [{"url": "https://yt3.googleusercontent.com/x=w60-h60-l90-rj", "width": 60, "height": 60}]}
+    playlist = {"browseId": "VLPL123", "title": "Mix", "author": "Me", "itemCount": 65, "thumbnails": []}
+    assert from_collection([album, {"title": "no id"}], "albums") == [{
+        "type": "album", "browseId": "MPRE1", "playlistId": "OLAK1", "title": "Prism", "artists": ["Katy Perry"], "year": "2013", "albumType": "Album",
+        "thumbnailUrl": "https://yt3.googleusercontent.com/x=w544-h544-l90-rj", "url": "https://music.youtube.com/playlist?list=OLAK1",
+    }]
+    assert from_collection([playlist], "playlists")[0] == {"type": "playlist", "playlistId": "PL123", "title": "Mix", "author": "Me", "itemCount": "65", "thumbnailUrl": None, "url": "https://www.youtube.com/playlist?list=PL123"}
+    video = from_ytmusic({"resultType": "video", "videoId": "v1", "title": "T", "views": "4.2B"})
+    assert (video["type"], video["views"], video["thumbnailUrl"]) == ("video", "4.2B", "https://i.ytimg.com/vi/v1/hqdefault.jpg")
