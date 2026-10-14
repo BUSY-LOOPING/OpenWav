@@ -110,6 +110,7 @@ export function createYtdlp({ bin = process.env.YTDLP_PATH || 'yt-dlp', spawnFn 
           '--no-playlist',
           '--no-warnings',
           '--newline',
+          '--progress',
           '-x',
           '--audio-format',
           format,
