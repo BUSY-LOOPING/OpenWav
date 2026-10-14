@@ -127,7 +127,7 @@ function TopResult({ item, onArtist }: { item: OnlineResults['top']; onArtist: (
       <Thumb src={item.thumbnailUrl} fallback={song ? ytFallback(song.videoId) : null} className={`h-24 sm:h-28 ${item.type === 'video' ? 'aspect-video' : 'w-24 sm:w-28'}`} />
     );
   const title = item.type === 'artist' ? item.name : item.title;
-  const subtitle = song ? subtitleOf(song) : item.type === 'artist' ? 'Artist' : [item.albumType ?? 'Album', item.artists.join(', '), item.year].filter(Boolean).join(' • ');
+  const subtitle = item.type === 'album' ? [item.albumType ?? 'Album', item.artists.join(', '), item.year].filter(Boolean).join(' • ') : item.type === 'artist' ? 'Artist' : subtitleOf(item);
   const action =
     item.type === 'artist' ? (
       <Button onClick={() => onArtist(item.name)}>
