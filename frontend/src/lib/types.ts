@@ -164,6 +164,11 @@ export interface Explore {
   genres: string[];
 }
 
+export interface RelatedResults {
+  library: Track[];
+  online: YoutubeResult[];
+}
+
 export interface SearchResults {
   online: OnlineResults | null;
   library: LibraryResults | null;

@@ -60,7 +60,7 @@ export function buildApp(overrides = {}) {
     producer,
     producerReady: () => true,
     storage: { sent: [], send: async (cmd) => external.storage.sent.push(cmd) },
-    scraper: { search: async () => [], suggestions: async () => [], health: async () => ({}) },
+    scraper: { search: async () => [], related: async () => [], suggestions: async () => [], health: async () => ({}) },
     recommender: { forUser: async () => [], similar: async () => [], retrain: async () => ({}), health: async () => ({}) },
     lyrics: { find: async () => ({ plain: 'la la', synced: null }) },
     monitoring: { latency: async () => ({ p95Ms: 120, p99Ms: 400, errorRate: 0 }), alerts: async () => [] },

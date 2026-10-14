@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { SeekBar, TransportControls } from './PlayerBar';
 import { TrackMenu } from '../components/TrackMenu';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
+import { YoutubeRow } from '../components/YoutubeRow';
 import { Icon, IconButton, Spinner, Thumb } from '../components/ui';
 import { formatTime } from '../lib/format';
 import { useLyrics, useRelated, useToggleLike } from '../lib/queries';
@@ -87,12 +88,25 @@ function LyricsPanel({ id }: { id: string }) {
 function RelatedPanel({ id }: { id: string }) {
   const { data, isLoading } = useRelated(id);
   if (isLoading) return <TrackRowSkeleton />;
-  if (!data?.length) return <p className="py-10 text-center text-muted">Nothing related yet</p>;
+  if (!data?.library.length && !data?.online.length) return <p className="py-10 text-center text-muted">Nothing related yet</p>;
   return (
-    <div>
-      {data.map((t, i) => (
-        <TrackRow key={t.id} track={t} tracks={data} index={i} showAlbum={false} />
-      ))}
+    <div className="flex flex-col gap-6 py-2">
+      {!!data.library.length && (
+        <section>
+          <h3 className="mb-1 px-2 text-sm font-medium uppercase tracking-wide text-muted">In your library</h3>
+          {data.library.map((t, i) => (
+            <TrackRow key={t.id} track={t} tracks={data.library} index={i} showAlbum={false} />
+          ))}
+        </section>
+      )}
+      {!!data.online.length && (
+        <section>
+          <h3 className="mb-1 px-2 text-sm font-medium uppercase tracking-wide text-muted">You might also like</h3>
+          {data.online.map((r) => (
+            <YoutubeRow key={r.videoId} result={r} />
+          ))}
+        </section>
+      )}
     </div>
   );
 }
@@ -134,6 +148,7 @@ export function NowPlaying() {
         <div className="h-1 w-10 rounded-full bg-white/30 md:hidden" />
         <TrackMenu track={track} />
       </div>
+      <IconButton icon="keyboard_arrow_down" label="Collapse now playing" onClick={close} size={32} className="absolute left-3 top-3 z-20 hidden md:inline-flex" />
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-6 md:flex-row md:gap-12 md:overflow-hidden md:px-12 md:pt-10">
         <div className="flex flex-col items-center justify-center gap-6 md:flex-1">
           <Thumb src={track.thumbnailUrl} alt={track.title} className="aspect-square w-full max-w-[min(80vw,520px)] shadow-2xl md:max-h-[70vh] md:w-auto" rounded="rounded-lg" />

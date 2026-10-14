@@ -30,6 +30,15 @@ class FakeYTMusic:
             ]
         return self._search
 
+    def get_watch_playlist(self, videoId=None, limit=None):
+        self.calls.append(("watch", videoId))
+        if self._error:
+            raise self._error
+        return {"tracks": [
+            {"videoId": videoId, "title": "Seed", "artists": [{"name": "A"}], "length": "3:00", "thumbnail": []},
+            {"videoId": "next1", "title": "Next", "artists": [{"name": "B"}], "length": "2:05", "thumbnail": [{"url": "https://yt3.googleusercontent.com/n=w60-h60-l90", "width": 60, "height": 60}], "views": "1M"},
+        ]}
+
     def get_search_suggestions(self, q):
         self.calls.append(("suggest", q))
         return ["one", "two", {"not": "a string"}]
@@ -215,3 +224,25 @@ def test_search_collections_without_ytdlp_fallback():
     artists = client.get("/search", params={"q": "taylor", "filter": "artists"}).json()["items"]
     assert [a["name"] for a in artists] == ["Taylor Swift Tribute", "Taylor Swift"]
     assert client.get("/search", params={"q": "x", "filter": "podcasts"}).status_code == 422
+
+
+def test_related_returns_the_radio_without_the_seed_track():
+    yt = FakeYTMusic()
+    client = client_for(yt)
+    items = client.get("/related", params={"videoId": "seed123"}).json()["items"]
+    assert [(i["videoId"], i["durationSec"], i["thumbnailUrl"]) for i in items] == [("next1", 125, "https://yt3.googleusercontent.com/n=w544-h544-l90")]
+    assert client.get("/related", params={"videoId": "bad id!"}).status_code == 422
+
+
+def test_related_falls_back_when_the_related_tab_breaks_the_library_parser():
+    class Broken(FakeYTMusic):
+        def get_watch_playlist(self, videoId=None, limit=None):
+            raise KeyError("endpoint")
+
+        def _send_request(self, endpoint, body):
+            self.calls.append((endpoint, body["playlistId"]))
+            return {}
+
+    yt = Broken()
+    assert client_for(yt).get("/related", params={"videoId": "seed123"}).json() == {"items": []}
+    assert yt.calls == [("next", "RDAMVMseed123")]

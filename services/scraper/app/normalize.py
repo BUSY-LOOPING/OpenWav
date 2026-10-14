@@ -161,3 +161,12 @@ def artist_match(results: Any, name: str) -> Optional[Dict[str, Any]]:
     artists = [a for a in from_collection(results, "artists") if a["thumbnailUrl"]]
     wanted = name.strip().casefold()
     return next((a for a in artists if a["name"].casefold() == wanted), artists[0] if artists else None)
+
+
+def from_watch(tracks: Any, seed: str) -> List[Dict[str, Any]]:
+    items = (
+        from_ytmusic({**t, "resultType": "song", "duration": t.get("length"), "thumbnails": t.get("thumbnail") or t.get("thumbnails")})
+        for t in tracks or []
+        if isinstance(t, dict) and t.get("videoId") != seed
+    )
+    return [item for item in items if item]

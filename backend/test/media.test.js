@@ -102,6 +102,30 @@ describe('home, explore and search', () => {
     expect(res.body.data[0].items.map((t) => t.id)).toEqual([second.id, track.id]);
   });
 
+  it('relates tracks by artist, then shared tags, then the recommender, alongside the YouTube Music radio', async () => {
+    const sameArtist = await createTrack({ title: 'Save Your Tears' });
+    await prisma.mediaArtist.create({ data: { mediaId: sameArtist.id, artistId: (await prisma.artist.findFirst()).id } });
+    const sameTag = await createTrack({ title: 'Synth', metadata: { tags: ['SYNTHWAVE'] } });
+    const unrelated = await createTrack({ title: 'Lullaby', metadata: { tags: ['sleep'] } });
+    const suggestedByModel = await createTrack({ title: 'Model pick' });
+    ctx = buildApp({
+      recommender: { similar: async () => [suggestedByModel.id, sameTag.id], forUser: async () => [], health: async () => ({}) },
+      scraper: {
+        search: async () => [],
+        suggestions: async () => [],
+        health: async () => ({}),
+        related: async (videoId) => (videoId === track.sourceId ? [{ type: 'song', videoId: sameTag.sourceId, title: 'Synth' }, { type: 'song', videoId: 'new1', title: 'Fresh' }] : []),
+      },
+    });
+    const res = await ctx.request.get(`/api/v1/media/${track.id}/related`).set(bearer(ctx.deps, user)).expect(200);
+    expect(res.body.data.library.map((t) => t.id)).toEqual([sameArtist.id, sameTag.id, suggestedByModel.id]);
+    expect(res.body.data.library.map((t) => t.id)).not.toContain(unrelated.id);
+    expect(res.body.data.online.map((t) => [t.videoId, t.downloaded, t.mediaId])).toEqual([
+      [sameTag.sourceId, true, sameTag.id],
+      ['new1', false, null],
+    ]);
+  });
+
   it('finds mood tracks by tag case-insensitively', async () => {
     const res = await ctx.request.get('/api/v1/explore/moods/Commute');
     expect(res.body.data.map((t) => t.id)).toEqual([track.id]);

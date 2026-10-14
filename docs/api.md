@@ -38,7 +38,7 @@ Password: 8–128 chars, at least one letter and one digit.
 | GET | /explore | | `{ newReleases: Track[], charts: Track[], moods: string[], genres: string[] }` |
 | GET | /explore/moods/:mood | | `Track[]` (mood or genre label, case-insensitive) |
 | GET | /media/:id | | `Track` |
-| GET | /media/:id/related | | `Track[]` |
+| GET | /media/:id/related | | `{ library: Track[], online: YoutubeResult[] }`. `library` ranks your tracks by shared artist, then shared tags, then the recommender. `online` is the YouTube Music radio for the track (from the scraper's `/related`), with `downloaded`/`mediaId` set when a song is already in the library. |
 | GET | /media/:id/lyrics | | `{ plain: string | null, synced: string | null }` |
 | POST | /media/:id/stream | | `{ url, expiresAt }` signed nginx URL, supports Range |
 | PUT/DELETE | /media/:id/like | | `{ liked }` |

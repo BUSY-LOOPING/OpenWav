@@ -18,6 +18,7 @@ import type {
   Lyrics,
   Playlist,
   PlaylistDetail,
+  RelatedResults,
   SearchResults,
   SearchScope,
   SearchType,
@@ -52,7 +53,7 @@ export const useExplore = () => useQuery({ queryKey: keys.explore, queryFn: () =
 export const useMood = (mood: string) =>
   useQuery({ queryKey: keys.mood(mood), queryFn: () => get<Track[]>(`/explore/moods/${encodeURIComponent(mood)}`) });
 export const useRelated = (id: string | undefined) =>
-  useQuery({ queryKey: keys.related(id ?? ''), queryFn: () => get<Track[]>(`/media/${id}/related`), enabled: !!id });
+  useQuery({ queryKey: keys.related(id ?? ''), queryFn: () => get<RelatedResults>(`/media/${id}/related`), enabled: !!id, staleTime: 10 * 60_000 });
 export const useLyrics = (id: string | undefined) =>
   useQuery({ queryKey: keys.lyrics(id ?? ''), queryFn: () => get<Lyrics>(`/media/${id}/lyrics`), enabled: !!id, retry: false });
 export const useArtist = (id: string) => useQuery({ queryKey: keys.artist(id), queryFn: () => get<ArtistDetail>(`/artists/${id}`) });
