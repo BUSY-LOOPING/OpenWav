@@ -1,3 +1,16 @@
 .env*
+!.env.example
 node_modules*
 logs/
+missing.md
+
+temp/
+media/
+infra/certs/*
+!infra/certs/.gitkeep
+infra/ytdlp/*
+!infra/ytdlp/.gitkeep
+__pycache__/
+.pytest_cache/
+dist/
+.DS_Store

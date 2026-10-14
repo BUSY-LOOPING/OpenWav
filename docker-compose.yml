@@ -1,217 +1,401 @@
+name: openwav
+
+x-node-env: &node-env
+  NODE_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/${RABBITMQ_VHOST}
+  KAFKA_BROKERS: redpanda:9092
+  S3_ENDPOINT: http://rustfs:9000
+  S3_PUBLIC_ENDPOINT: ${PUBLIC_BASE_URL}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+  S3_SECRET_KEY: ${S3_SECRET_KEY}
+  S3_BUCKET_AUDIO: ${S3_BUCKET_AUDIO:-audio}
+  S3_BUCKET_COVERS: ${S3_BUCKET_COVERS:-covers}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+  STREAM_SIGNING_SECRET: ${STREAM_SIGNING_SECRET}
+  JWT_SECRET: ${JWT_SECRET}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+  SCRAPER_URL: http://scraper:8100
+  RECOMMENDER_URL: http://recommender:8000
+  PROMETHEUS_URL: http://prometheus:9090
+  ALERTMANAGER_URL: http://alertmanager:9093
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+  CORS_ORIGINS: ${PUBLIC_BASE_URL}
+  GRAFANA_URL: http://grafana:3000
+  RABBITMQ_UI_URL: http://rabbitmq:15672
+  OPS_GRAFANA_URL: ${OPS_GRAFANA_URL:-http://127.0.0.1:3001}
+  OPS_PROMETHEUS_URL: ${OPS_PROMETHEUS_URL:-http://127.0.0.1:9090}
+  OPS_ALERTMANAGER_URL: ${OPS_ALERTMANAGER_URL:-http://127.0.0.1:9093}
+  OPS_RABBITMQ_URL: ${OPS_RABBITMQ_URL:-http://127.0.0.1:15672}
+
+x-restart: &restart
+  restart: unless-stopped
+  networks: [internal]
+
 services:
-  backend:
-    build: ./backend
-    container_name: openwav_backend
-    ports:
-      - "${BACKEND_PORT:-3001}:${PORT:-3000}"
-    env_file:
-      - .env
+  nginx:
+    <<: *restart
+    build:
+      context: .
+      additional_contexts:
+        certs: ./infra/certs
+      dockerfile: infra/nginx/Dockerfile
     environment:
-      - NODE_ENV=production
-      - DB_HOST=postgres        
-      - REDIS_HOST=redis
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_URL=amqp://openwav:openwav_rabbit_pass@rabbitmq:5672/openwav
-      - MINIO_ENDPOINT=minio
+      STREAM_SIGNING_SECRET: ${STREAM_SIGNING_SECRET}
+      S3_BUCKET_AUDIO: ${S3_BUCKET_AUDIO:-audio}
+      S3_BUCKET_COVERS: ${S3_BUCKET_COVERS:-covers}
+      TLS_COMMON_NAME: ${TLS_COMMON_NAME:-localhost}
+      AUDIO_CACHE_MAX_SIZE: ${AUDIO_CACHE_MAX_SIZE:-20g}
+      COVER_CACHE_MAX_SIZE: ${COVER_CACHE_MAX_SIZE:-2g}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - nginx_certs:/etc/nginx/certs
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      backend:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+
+  nginx-exporter:
+    <<: *restart
+    image: nginx/nginx-prometheus-exporter:1.3.0
+    command: ["--nginx.scrape-uri=http://nginx:8081/nginx_status"]
+    depends_on: [nginx]
+
+  migrate:
+    networks: [internal]
+    build:
+      context: .
+      additional_contexts:
+        certs: ./infra/certs
+      dockerfile: backend/Dockerfile
+    working_dir: /app
+    command: ["npm", "run", "db:deploy"]
+    environment: *node-env
     depends_on:
       postgres:
         condition: service_healthy
+
+  backend:
+    <<: *restart
+    build:
+      context: .
+      additional_contexts:
+        certs: ./infra/certs
+      dockerfile: backend/Dockerfile
+    environment:
+      <<: *node-env
+      PORT: 3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
-    volumes:
-      - ./backend/media:/usr/src/app/media
-      - ./backend/temp:/usr/src/app/temp
-      - ./backend/logs:/usr/src/app/logs
-    networks:
-      - openwav-internal
-    restart: unless-stopped
-
-  frontend:
-    build: ./frontend
-    container_name: openwav_frontend
-    ports:
-      - "${FRONTEND_PORT:-6330}:${FRONTEND_PORT:-6330}"
-    env_file:
-      - .env
-    environment:
-      - NODE_ENV=development
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - backend
-    networks:
-      - openwav-internal
-    restart: unless-stopped
+      redpanda-init:
+        condition: service_completed_successfully
+      scraper:
+        condition: service_started
 
   downloader:
-    build: ./services/downloader
-    container_name: openwav_downloader
-    env_file:
-      - .env
+    <<: *restart
+    build:
+      context: .
+      additional_contexts:
+        certs: ./infra/certs
+      dockerfile: services/downloader/Dockerfile
     environment:
-      - NODE_ENV=production
-      - DB_HOST=postgres
-      - REDIS_HOST=redis
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_URL=amqp://openwav:openwav_rabbit_pass@rabbitmq:5672/openwav
-      - MINIO_ENDPOINT=minio
+      <<: *node-env
+      METRICS_PORT: 9464
+      CONCURRENT_DOWNLOADS: ${CONCURRENT_DOWNLOADS:-3}
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-}
+    volumes:
+      - ./infra/ytdlp:/app/ytdlp:ro
+      - downloader_temp:/app/temp
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
-    volumes:
-      - ./backend/temp:/app/temp
-      - ./backend/media:/app/media
-      - ./backend/logs:/app/logs
-    networks:
-      - openwav-internal
-    restart: unless-stopped
 
   scheduler:
-    build: ./services/scheduler
-    container_name: openwav_scheduler
-    env_file:
-      - .env
+    <<: *restart
+    build:
+      context: .
+      additional_contexts:
+        certs: ./infra/certs
+      dockerfile: services/scheduler/Dockerfile
     environment:
-      - NODE_ENV=production
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_URL=amqp://openwav:openwav_rabbit_pass@rabbitmq:5672/openwav
+      <<: *node-env
+      METRICS_PORT: 9465
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  recommender:
+    <<: *restart
+    build:
+      context: ./services/recommender
+      additional_contexts:
+        certs: ./infra/certs
+    command: ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      KAFKA_BROKERS: redpanda:9092
+      MODEL_DIR: /data
+      RECOMMENDER_CONTENT_WEIGHT: ${RECOMMENDER_CONTENT_WEIGHT:-0.3}
+      RECOMMENDER_TRAIN_INTERVAL_SEC: ${RECOMMENDER_TRAIN_INTERVAL_SEC:-1800}
+      RECOMMENDER_TRAIN_AFTER_EVENTS: ${RECOMMENDER_TRAIN_AFTER_EVENTS:-500}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+    volumes:
+      - recommender_data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redpanda-init:
+        condition: service_completed_successfully
+
+  scraper:
+    <<: *restart
+    build:
+      context: ./services/scraper
+      additional_contexts:
+        certs: ./infra/certs
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      SCRAPER_CACHE_TTL_SEC: ${SCRAPER_CACHE_TTL_SEC:-21600}
+      SCRAPER_TIMEOUT_SEC: ${SCRAPER_TIMEOUT_SEC:-8}
+      SCRAPER_MAX_CONCURRENCY: ${SCRAPER_MAX_CONCURRENCY:-4}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  postgres:
+    <<: *restart
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  db-tunnel:
+    profiles: [tools]
+    networks: [internal]
+    image: alpine/socat:1.8.0.0
+    command: ["TCP-LISTEN:5432,fork,reuseaddr", "TCP:postgres:5432"]
+    ports:
+      - "127.0.0.1:${DB_TUNNEL_PORT:-5433}:5432"
     depends_on:
       postgres:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    volumes:
-      - ./backend/logs:/app/logs
-    networks:
-      - openwav-internal
-    restart: unless-stopped
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: openwav_postgres
-    restart: always
-    env_file:
-      - .env
+  postgres-exporter:
+    <<: *restart
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "${DB_PORT:-5432}:${DB_PORT:-5432}"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    networks:
-      - openwav-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on: [postgres]
 
   redis:
+    <<: *restart
     image: redis:7-alpine
-    container_name: openwav_redis
-    restart: always
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    command: ["redis-server", "--loglevel", "warning"]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes", "--loglevel", "warning"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - redisdata:/data
-    networks:
-      - openwav-internal
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  redis-exporter:
+    <<: *restart
+    image: oliver006/redis_exporter:v1.66.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on: [redis]
+
   rabbitmq:
+    <<: *restart
     image: rabbitmq:3.13-management-alpine
-    container_name: openwav_rabbitmq
-    restart: always
-    env_file:
-      - .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
     ports:
-      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
-      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
-    networks:
-      - openwav-internal
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 15s
       timeout: 10s
       retries: 5
 
-  minio:
-    image: quay.io/minio/minio:latest
-    container_name: openwav_minio
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    env_file:
-      - .env
+  rustfs:
+    <<: *restart
+    image: rustfs/rustfs:latest
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address ":9001"
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "false"
     volumes:
-      - miniodata:/data
-    networks:
-      - openwav-internal
+      - rustfsdata:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 20s
       retries: 3
-    restart: unless-stopped
 
-  minio-setup:
-    image: minio/mc:latest
-    container_name: openwav_minio_setup
-    env_file:
-      - .env
-    depends_on:
-      minio:
-        condition: service_healthy
-    networks:
-      - openwav-internal
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
-      /usr/bin/mc mb -p myminio/$${MINIO_BUCKET_AUDIO} || true &&
-      /usr/bin/mc mb -p myminio/$${MINIO_BUCKET_TEMP} || true &&
-      echo 'MinIO buckets ready.'
-      "
+  redpanda:
+    <<: *restart
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:9092
+    volumes:
+      - redpandadata:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --exit-when-healthy"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  redpanda-init:
+    networks: [internal]
+    image: redpandadata/redpanda:v24.2.7
+    entrypoint: ["/bin/sh", "/init.sh"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET_AUDIO: ${MINIO_BUCKET_AUDIO}
-      MINIO_BUCKET_TEMP: ${MINIO_BUCKET_TEMP}
+      KAFKA_BROKERS: redpanda:9092
+      EVENTS_RETENTION_MS: ${EVENTS_RETENTION_MS:-2592000000}
+    volumes:
+      - ./infra/redpanda/init.sh:/init.sh:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  prometheus:
+    <<: *restart
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheusdata:/prometheus
+
+  alertmanager:
+    <<: *restart
+    image: prom/alertmanager:v0.27.0
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_SLACK_WEBHOOK_URL: ${ALERT_SLACK_WEBHOOK_URL:-}
+      ALERT_SLACK_CHANNEL: ${ALERT_SLACK_CHANNEL:-#alerts}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-alerts@openwav.local}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-true}
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./infra/observability/alertmanager/entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+      - alertmanagerdata:/alertmanager
+
+  grafana:
+    <<: *restart
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+
+  tempo:
+    <<: *restart
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./infra/observability/tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempodata:/var/tempo
+
+  loki:
+    <<: *restart
+    image: grafana/loki:3.2.1
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./infra/observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - lokidata:/loki
+
+  promtail:
+    <<: *restart
+    image: grafana/promtail:3.2.1
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./infra/observability/promtail/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
 
 volumes:
   pgdata:
   redisdata:
   rabbitmqdata:
-  miniodata:
+  rustfsdata:
+  redpandadata:
+  downloader_temp:
+  recommender_data:
+  nginx_certs:
+  nginx_cache:
+  prometheusdata:
+  alertmanagerdata:
+  grafanadata:
+  tempodata:
+  lokidata:
 
 networks:
-  openwav-internal:
+  internal:
     driver: bridge

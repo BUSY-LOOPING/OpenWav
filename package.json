@@ -1,14 +1,30 @@
 {
   "name": "openwav",
   "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "backend",
+    "frontend",
+    "services/downloader",
+    "services/scheduler"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "infra:up": "docker compose -f docker-compose.dev.yml --env-file .env up -d",
+    "infra:up": "docker compose -f docker-compose.dev.yml --env-file .env.dev up -d",
     "infra:down": "docker compose -f docker-compose.dev.yml down",
     "infra:logs": "docker compose -f docker-compose.dev.yml logs -f",
-    "migrate": "npm run migrate:up --prefix backend",
-    "dev:backend": "npm run dev --prefix backend",
-    "dev:frontend": "npm run dev --prefix frontend",
-    "dev:downloader": "npm run dev --prefix services/downloader",
-    "dev:scheduler": "npm run dev --prefix services/scheduler"
+    "db:generate": "npm run generate -w @openwav/db",
+    "db:migrate": "npm run migrate:dev -w @openwav/db",
+    "db:deploy": "npm run migrate:deploy -w @openwav/db",
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:downloader": "npm run dev -w downloader",
+    "dev:scheduler": "npm run dev -w scheduler",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "db:studio": "npm exec -w @openwav/db -- prisma studio --port 5555"
   }
 }

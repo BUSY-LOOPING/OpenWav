@@ -1,18 +1,22 @@
 {
-  "name": "openwav-downloader",
-  "version": "1.0.0",
+  "name": "downloader",
+  "version": "2.0.0",
+  "private": true,
   "type": "module",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --env-file ../../.env.dev --watch src/index.js"
+    "dev": "node --env-file=../../.env.dev --watch src/index.js",
+    "test": "vitest run"
   },
   "dependencies": {
-    "ioredis": "^5.3.2",
-    "amqplib": "^0.10.4",
-    "minio": "^8.0.0",
-    "openwav": "file:../..",
-    "pg": "^8.11.3",
-    "winston": "^3.11.0"
+    "@aws-sdk/client-s3": "^3.1151.0",
+    "@openwav/db": "*",
+    "@openwav/shared": "*",
+    "amqplib": "^0.10.9",
+    "ioredis": "^5.11.1"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.4"
   }
 }
