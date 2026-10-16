@@ -8,6 +8,7 @@ const LINKS = [
   { to: '/admin/downloads', label: 'Downloads', icon: 'download' },
   { to: '/admin/media', label: 'Media', icon: 'library_music' },
   { to: '/admin/discovery', label: 'Auto-discovery', icon: 'travel_explore' },
+  { to: '/admin/recommender', label: 'Recommender', icon: 'model_training' },
   { to: '/admin/settings', label: 'Settings', icon: 'tune' },
 ];
 

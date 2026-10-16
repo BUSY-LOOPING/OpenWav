@@ -20,6 +20,7 @@ import type {
   Playlist,
   OnlinePlaylistDetail,
   PlaylistDetail,
+  RecommenderInsights,
   RelatedResults,
   SearchResults,
   SearchScope,
@@ -235,6 +236,12 @@ export const useAdminDiscovery = () =>
     queryKey: keys.admin('discovery'),
     queryFn: () => get<DiscoveryStatus>('/admin/discovery'),
     refetchInterval: (q) => (q.state.data && !q.state.data.lastRun?.finishedAt) || q.state.data?.counts.queued || q.state.data?.counts.downloading || q.state.data?.counts.uploading ? 3000 : 30_000,
+  });
+export const useAdminRecommender = () =>
+  useQuery({
+    queryKey: keys.admin('recommender'),
+    queryFn: () => get<RecommenderInsights>('/admin/recommender'),
+    refetchInterval: (q) => (['loading', 'training'].includes(q.state.data?.status.state ?? '') ? 1500 : 15_000),
   });
 export const useAdminCookies = () =>
   useQuery({ queryKey: keys.admin('cookies'), queryFn: () => get<{ configured: boolean; entries: number; domains: string[]; expiresAt: string | null; updatedAt: string | null }>('/admin/ytdlp/cookies') });

@@ -32,6 +32,7 @@ export function createRecommender({ baseUrl }) {
     forUser: (userId, limit = 20) => get(`/recommendations/${userId}?limit=${limit}`),
     similar: (mediaId, limit = 20) => get(`/similar/${mediaId}?limit=${limit}`),
     retrain: () => fetchJson(`${baseUrl}/train`, { method: 'POST', timeoutMs: 2000 }),
+    insights: () => fetchJson(`${baseUrl}/insights`, { timeoutMs: 5000 }),
     health: () => fetchJson(`${baseUrl}/health`, { timeoutMs: 1000 }),
   };
 }

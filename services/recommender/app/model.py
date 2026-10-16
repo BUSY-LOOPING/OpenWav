@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
@@ -50,6 +50,7 @@ def als(
     iterations: int = 10,
     alpha: float = 40.0,
     seed: int = 0,
+    on_iteration: Optional[Callable[[int, float], None]] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
     n_users, n_items = weights.shape
@@ -59,12 +60,20 @@ def als(
     user_factors = rng.normal(scale=0.1, size=(n_users, factors))
     item_factors = rng.normal(scale=0.1, size=(n_items, factors))
     with np.errstate(all="ignore"):
-        for _ in range(iterations):
+        for iteration in range(iterations):
             user_factors = _solve(item_factors, confidence, preference, reg)
             item_factors = _solve(user_factors, confidence.T, preference.T, reg)
+            if on_iteration:
+                on_iteration(iteration + 1, als_loss(user_factors, item_factors, confidence, preference, reg))
     if not (np.isfinite(user_factors).all() and np.isfinite(item_factors).all()):
         raise FloatingPointError("ALS diverged")
     return user_factors, item_factors
+
+
+def als_loss(user_factors: np.ndarray, item_factors: np.ndarray, confidence: np.ndarray, preference: np.ndarray, reg: float) -> float:
+    error = (confidence * (preference - user_factors @ item_factors.T) ** 2).sum()
+    penalty = reg * ((user_factors ** 2).sum() + (item_factors ** 2).sum())
+    return float((error + penalty) / max(preference.size, 1))
 
 
 def _solve(fixed: np.ndarray, confidence: np.ndarray, preference: np.ndarray, reg: float) -> np.ndarray:
@@ -173,11 +182,15 @@ class Model:
         factors: int = 32,
         reg: float = 0.1,
         iterations: int = 10,
+        alpha: float = 40.0,
+        half_life_days: float = HALF_LIFE_DAYS,
+        on_iteration: Optional[Callable[[int, float], None]] = None,
     ) -> "Model":
         now = now or datetime.now(timezone.utc)
-        users, items, matrix = build_matrix(interactions, now, catalog=list(item_tokens))
+        users, items, matrix = build_matrix(interactions, now, catalog=list(item_tokens), half_life_days=half_life_days)
         if users:
-            user_factors, item_factors = als(matrix, factors=factors, reg=reg, iterations=iterations)
+            user_factors, item_factors = als(matrix, factors=factors, reg=reg, iterations=iterations, alpha=alpha,
+                                             on_iteration=on_iteration)
         else:
             user_factors, item_factors = np.zeros((0, factors)), np.zeros((len(items), factors))
         heard = {u: set(np.flatnonzero(~np.isnan(matrix[row])).tolist()) for row, u in enumerate(users)}
@@ -240,7 +253,7 @@ class Model:
             popularity=self.popularity,
             heard=pairs(self.heard),
             liked=pairs(self.liked),
-            meta=np.array([self.version, self.trained_at.timestamp() if self.trained_at else 0.0]),
+            meta=np.array([self.version, self.trained_at.timestamp() if self.trained_at else 0.0, self.content_weight]),
         )
         os.replace(tmp, path)
 
@@ -254,7 +267,9 @@ class Model:
                 grouped[users[int(row)]].add(int(item))
             return grouped
 
-        version, trained = data["meta"]
+        version, trained = data["meta"][:2]
+        if len(data["meta"]) > 2:
+            content_weight = float(data["meta"][2])
         return cls(users, data["items"].tolist(), data["user_factors"], data["item_factors"], data["features"],
                    data["popularity"], groups(data["heard"]), groups(data["liked"]), int(version),
                    datetime.fromtimestamp(trained, timezone.utc) if trained else None, content_weight)

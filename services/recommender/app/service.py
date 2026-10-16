@@ -19,6 +19,27 @@ INTERACTIONS = Counter("recommender_interactions", "Interactions stored from tra
 
 log = logging.getLogger("recommender")
 
+PARAMS = {
+    "content_weight": ("recommender.blend_content_weight", 0.0, 1.0, float),
+    "factors": ("recommender.factors", 2, 256, int),
+    "reg": ("recommender.regularization", 0.0, 10.0, float),
+    "iterations": ("recommender.iterations", 1, 50, int),
+    "alpha": ("recommender.alpha", 1.0, 500.0, float),
+    "half_life_days": ("recommender.half_life_days", 1.0, 365.0, float),
+    "window_days": ("recommender.window_days", 7, 3650, int),
+}
+DEFAULT_PARAMS = {"content_weight": 0.3, "factors": 32, "reg": 0.1, "iterations": 10, "alpha": 40.0,
+                  "half_life_days": 30.0, "window_days": 365}
+
+
+def resolve_params(stored: dict, defaults: dict = DEFAULT_PARAMS) -> dict:
+    params = {}
+    for name, (key, low, high, cast) in PARAMS.items():
+        value = stored.get(key)
+        valid = isinstance(value, (int, float)) and not isinstance(value, bool)
+        params[name] = cast(min(max(value, low), high)) if valid else defaults[name]
+    return params
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -74,6 +95,7 @@ class Service:
         self.model_path = os.path.join(model_dir, "model.npz")
         self._pending = 0
         self._train_lock = threading.Lock()
+        self.status = {"state": "idle"}
         self.model = Model.empty(content_weight)
         if os.path.exists(self.model_path):
             try:
@@ -81,21 +103,51 @@ class Service:
             except Exception:
                 log.exception("model load failed, starting empty")
 
+    def params(self) -> dict:
+        return resolve_params(self.store.load_params(), {**DEFAULT_PARAMS, "content_weight": self.content_weight})
+
+    def _progress(self, iteration: int, loss: float) -> None:
+        self.status = {**self.status, "iteration": iteration, "loss": [*self.status["loss"], round(loss, 6)]}
+
     def train(self) -> bool:
         if not self._train_lock.acquire(blocking=False):
             return False
         try:
             started = time.perf_counter()
-            model = Model.train(self.store.load_interactions(), self.store.load_content(), content_weight=self.content_weight)
+            self.status = {"state": "loading", "startedAt": datetime.now(timezone.utc).isoformat(), "iteration": 0,
+                           "loss": [], "error": None}
+            params = self.params()
+            interactions = self.store.load_interactions(params["window_days"])
+            content = self.store.load_content()
+            loaded = time.perf_counter()
+            self.status = {**self.status, "state": "training", "params": params}
+            model = Model.train(interactions, content, content_weight=params["content_weight"], factors=params["factors"],
+                                reg=params["reg"], iterations=params["iterations"], alpha=params["alpha"],
+                                half_life_days=params["half_life_days"], on_iteration=self._progress)
             os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
             model.save(self.model_path)
             self.model = model
             elapsed = time.perf_counter() - started
             TRAIN_DURATION.observe(elapsed)
-            meta = {"users": len(model.users), "items": len(model.items), "seconds": round(elapsed, 3)}
+            cells = len(model.users) * len(model.items)
+            meta = {
+                "users": len(model.users),
+                "items": len(model.items),
+                "interactions": len(interactions),
+                "density": round(sum(len(h) for h in model.heard.values()) / cells, 6) if cells else 0.0,
+                "seconds": round(elapsed, 3),
+                "loadSeconds": round(loaded - started, 3),
+                "params": params,
+                "loss": self.status["loss"],
+            }
             self.store.save_model(model.version, model.trained_at, meta)
+            self.status = {**self.status, "state": "idle", "finishedAt": datetime.now(timezone.utc).isoformat()}
             log.info("model trained", extra={"extra_fields": {"version": model.version, **meta}})
             return True
+        except Exception as exc:
+            self.status = {**self.status, "state": "failed", "error": str(exc) or type(exc).__name__,
+                           "finishedAt": datetime.now(timezone.utc).isoformat()}
+            raise
         finally:
             self._train_lock.release()
 
