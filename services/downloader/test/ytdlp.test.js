@@ -76,6 +76,21 @@ describe('spawned yt-dlp', () => {
     expect(file).toBe(`${dir}/task.mp3`);
   });
 
+  it.each([
+    ['opus', '-c:a libopus -b:a 160k'],
+    ['m4a', '-c:a aac -b:a 160k'],
+    ['mp3', '-c:a libmp3lame -b:a 160k'],
+    ['flac', '-c:a flac'],
+  ])('forces a %s encoder so loudnorm never meets stream copy', async (format, codec) => {
+    const { bin, dir } = await fakeBin(`
+      const args = process.argv;
+      require('node:fs').writeFileSync(require('node:path').join(__dirname, 'pp.txt'), args[args.indexOf('--postprocessor-args') + 1]);
+      console.log(args[args.indexOf('-o') + 1].replace('%(ext)s', '${format}'));
+    `);
+    await createYtdlp({ bin }).download({ url: 'u', dir, name: 'task', format, quality: '160k' });
+    expect(await readFile(path.join(dir, 'pp.txt'), 'utf8')).toBe(`ExtractAudio:-af loudnorm=I=-14:TP=-1.5:LRA=11 ${codec}`);
+  });
+
   it('passes arguments without a shell', async () => {
     const { bin } = await fakeBin(`console.log(JSON.stringify({ id: process.argv.at(-1), title: 't' }))`);
     const meta = await createYtdlp({ bin }).probe('https://x/$(rm -rf ~);`id`');
