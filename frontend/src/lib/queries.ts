@@ -1,7 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, getPage, send } from './api';
+import { errorMessage, get, getPage, send } from './api';
 import { track } from './events';
-import { setLiked } from '../store/player';
+import { toast } from './toast';
+import { playTracks, setLiked } from '../store/player';
 import { useAppDispatch } from '../store';
 import type {
   DiscoveryStatus,
@@ -17,6 +18,7 @@ import type {
   HistoryTrack,
   Lyrics,
   Playlist,
+  OnlinePlaylistDetail,
   PlaylistDetail,
   RelatedResults,
   SearchResults,
@@ -74,6 +76,24 @@ export function usePaged<T>(key: unknown[], url: string, params: Record<string, 
     enabled,
   });
 }
+
+export const useOnlinePlaylist = (id: string) =>
+  useQuery({ queryKey: ['online-playlist', id], queryFn: () => get<OnlinePlaylistDetail>(`/search/playlist/${id}`), staleTime: 5 * 60_000 });
+
+export function usePlayCollection() {
+  const dispatch = useAppDispatch();
+  return async (load: () => Promise<Track[]>) => {
+    try {
+      const tracks = await load();
+      if (!tracks.length) return toast('Nothing to play yet');
+      dispatch(playTracks({ tracks }));
+    } catch (e) {
+      toast(errorMessage(e, 'Could not play'));
+    }
+  };
+}
+export const loadPlaylistTracks = (id: string) => () => get<PlaylistDetail>(`/playlists/${id}`).then((p) => p.tracks);
+export const loadLikedTracks = () => getPage<Track>('/library/liked', { limit: 100 }).then((p) => p.data);
 
 export const useLiked = () => usePaged<Track>(keys.library('liked'), '/library/liked');
 export const useHistory = () => usePaged<HistoryTrack>(keys.library('history'), '/library/history');

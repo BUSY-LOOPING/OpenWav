@@ -131,6 +131,13 @@ def create_app(upstream: Optional[Upstream] = None, redis: Any = None) -> FastAP
     async def related(videoId: str = Query(..., pattern="^[A-Za-z0-9_-]{6,20}$")):
         return {"items": await cache.get_or_set(f"scraper:related:{videoId}", lambda: upstream.related(videoId), logger)}
 
+    @app.get("/playlist")
+    async def playlist(id: str = Query(..., pattern="^[A-Za-z0-9_-]{10,80}$")):
+        item = await cache.get_or_set(f"scraper:playlist:{id}", lambda: upstream.playlist(id), logger)
+        if not item:
+            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND", "message": "Playlist not found"}})
+        return {"item": item}
+
     @app.get("/charts")
     async def charts(country: str = Query("ZZ", pattern="^[A-Za-z]{2}$")):
         code = country.upper()

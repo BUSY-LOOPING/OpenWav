@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { badRequest } from '../lib/errors.js';
+import { badRequest, notFound, unavailable } from '../lib/errors.js';
 import { validate } from '../lib/http.js';
 import { playlistInclude, tracksByIds } from '../lib/serializers.js';
 
@@ -41,6 +41,13 @@ export function searchRoutes({ prisma, auth, serialize, scraper, events, logger 
     };
   }
 
+  async function markDownloaded(tracks) {
+    const ids = tracks.map((t) => t.videoId);
+    const known = ids.length ? await prisma.media.findMany({ where: { status: 'completed', sourceId: { in: ids } }, select: { id: true, sourceId: true } }) : [];
+    const bySource = new Map(known.map((m) => [m.sourceId, m.id]));
+    return tracks.map((t) => ({ ...t, downloaded: bySource.has(t.videoId), mediaId: bySource.get(t.videoId) ?? null }));
+  }
+
   async function online(term, want, limit) {
     const lists = await Promise.all(
       ONLINE.map((kind) =>
@@ -48,12 +55,9 @@ export function searchRoutes({ prisma, auth, serialize, scraper, events, logger 
       ),
     );
     const result = Object.fromEntries(ONLINE.map((kind, i) => [kind, lists[i]]));
-    const ids = [...result.songs, ...result.videos].map((t) => t.videoId);
-    const known = ids.length ? await prisma.media.findMany({ where: { status: 'completed', sourceId: { in: ids } }, select: { id: true, sourceId: true } }) : [];
-    const bySource = new Map(known.map((m) => [m.sourceId, m.id]));
-    const mark = (t) => ({ ...t, downloaded: bySource.has(t.videoId), mediaId: bySource.get(t.videoId) ?? null });
-    result.songs = result.songs.map(mark);
-    result.videos = result.videos.map(mark);
+    const marked = await markDownloaded([...result.songs, ...result.videos]);
+    result.songs = marked.slice(0, result.songs.length);
+    result.videos = marked.slice(result.songs.length);
     const exactArtist = result.artists.find((a) => a.name.toLowerCase() === term.toLowerCase());
     result.top = exactArtist ?? result.songs[0] ?? result.videos[0] ?? result.albums[0] ?? null;
     return result;
@@ -81,6 +85,14 @@ export function searchRoutes({ prisma, auth, serialize, scraper, events, logger 
       res.json({ data });
     },
   );
+
+  router.get('/playlist/:id', auth.optionalAuth, validate({ params: z.object({ id: z.string().regex(/^[\w-]{10,80}$/) }) }), async (req, res) => {
+    const item = await scraper.playlist(req.params.id).catch((err) => {
+      throw err.status === 404 ? notFound('Playlist') : unavailable('Could not load this playlist from YouTube');
+    });
+    if (!item) throw notFound('Playlist');
+    res.json({ data: { ...item, tracks: await markDownloaded(item.tracks) } });
+  });
 
   router.get('/suggestions', auth.optionalAuth, validate({ query: z.object({ q }) }), async (req, res) => {
     const term = req.query.q;

@@ -1,14 +1,11 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 import { AlbumCard, ArtistCard, Card, PlaylistCard } from '../components/Card';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
-import { YoutubeRow, subtitleOf, usePlayResult, ytFallback } from '../components/YoutubeRow';
-import { toast } from '../lib/toast';
+import { YoutubeRow, subtitleOf, useImport, usePlayResult, ytFallback } from '../components/YoutubeRow';
 import { Button, Chips, Icon, Status, Thumb } from '../components/ui';
-import { errorMessage, send } from '../lib/api';
 import { track as trackEvent } from '../lib/events';
-import { keys, useSearch } from '../lib/queries';
+import { useSearch } from '../lib/queries';
 import type { OnlineAlbum, OnlineArtist, OnlinePlaylist, OnlineResults, SearchScope, SearchType, YoutubeResult } from '../lib/types';
 
 const ONLINE_TYPES = ['all', 'songs', 'videos', 'albums', 'artists', 'playlists'] as const;
@@ -16,22 +13,6 @@ const LIBRARY_TYPES = ['all', 'songs', 'albums', 'artists', 'playlists'] as cons
 const LABELS: Record<SearchType, string> = { all: 'All', songs: 'Songs', videos: 'Videos', albums: 'Albums', artists: 'Artists', playlists: 'Community playlists' };
 const ROW = 'flex gap-4 overflow-x-auto no-scrollbar';
 const GRID = 'grid grid-cols-2 gap-6 sm:grid-cols-4 lg:grid-cols-6';
-
-function useImport() {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-  return async (url: string | null, name: string) => {
-    if (!url) return toast('This album cannot be imported');
-    try {
-      const { playlistId } = await send<{ playlistId: string }>('post', '/playlists/import', { url, name });
-      qc.invalidateQueries({ queryKey: keys.myPlaylists });
-      toast(`Importing ${name}`);
-      navigate(`/playlist/${playlistId}`);
-    } catch (e) {
-      toast(errorMessage(e, 'Import failed'));
-    }
-  };
-}
 
 function PlayButton({ result }: { result: YoutubeResult }) {
   const { play, busy, percent } = usePlayResult(result);
@@ -44,6 +25,7 @@ function PlayButton({ result }: { result: YoutubeResult }) {
 
 function TopResult({ item, onArtist }: { item: OnlineResults['top']; onArtist: (name: string) => void }) {
   const runImport = useImport();
+  const navigate = useNavigate();
   if (!item) return null;
   const song = item.type === 'song' || item.type === 'video' ? item : null;
 
@@ -61,9 +43,15 @@ function TopResult({ item, onArtist }: { item: OnlineResults['top']; onArtist: (
         <Icon name="shuffle" /> Songs
       </Button>
     ) : item.type === 'album' ? (
-      <Button onClick={() => runImport(item.url, item.title)}>
-        <Icon name="download" /> Import
-      </Button>
+      item.playlistId ? (
+        <Button onClick={() => navigate(`/youtube/playlist/${item.playlistId}`)}>
+          <Icon name="album" /> View album
+        </Button>
+      ) : (
+        <Button onClick={() => runImport(item.url, item.title)}>
+          <Icon name="download" /> Import
+        </Button>
+      )
     ) : (
       <PlayButton result={item} />
     );
@@ -105,18 +93,31 @@ function Block({ title, children, onMore }: { title: string; children: React.Rea
 
 function OnlineAlbumCard({ album }: { album: OnlineAlbum }) {
   const runImport = useImport();
-  return <Card title={album.title} subtitle={[album.albumType ?? 'Album', album.artists.join(', '), album.year].filter(Boolean).join(' • ')} images={[album.thumbnailUrl]} onPlay={() => runImport(album.url, album.title)} />;
+  const navigate = useNavigate();
+  const href = album.playlistId ? `/youtube/playlist/${album.playlistId}` : undefined;
+  return (
+    <Card
+      title={album.title}
+      subtitle={[album.albumType ?? 'Album', album.artists.join(', '), album.year].filter(Boolean).join(' • ')}
+      images={[album.thumbnailUrl]}
+      icon="album"
+      href={href}
+      onPlay={() => (href ? navigate(`${href}?play=1`) : runImport(album.url, album.title))}
+    />
+  );
 }
 
 function OnlinePlaylistCard({ playlist }: { playlist: OnlinePlaylist }) {
-  const runImport = useImport();
+  const navigate = useNavigate();
+  const href = `/youtube/playlist/${playlist.playlistId}`;
   return (
     <Card
       title={playlist.title}
       subtitle={[playlist.author, playlist.itemCount && `${playlist.itemCount} songs`].filter(Boolean).join(' • ')}
       images={[playlist.thumbnailUrl]}
       icon="queue_music"
-      onPlay={() => runImport(playlist.url, playlist.title)}
+      href={href}
+      onPlay={() => navigate(`${href}?play=1`)}
     />
   );
 }

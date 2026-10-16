@@ -170,3 +170,27 @@ def from_watch(tracks: Any, seed: str) -> List[Dict[str, Any]]:
         if isinstance(t, dict) and t.get("videoId") != seed
     )
     return [item for item in items if item]
+
+
+def playlist_detail(result: Any, playlist_id: str) -> Optional[Dict[str, Any]]:
+    if not isinstance(result, dict) or not result.get("title"):
+        return None
+    author = result.get("author")
+    if isinstance(author, dict):
+        author = author.get("name")
+    elif isinstance(author, list):
+        author = ", ".join(a["name"] for a in author if isinstance(a, dict) and a.get("name")) or None
+    cover = upsize(largest_thumbnail(result.get("thumbnails")))
+    tracks = [item for item in (from_ytmusic({**t, "resultType": "song"}) for t in result.get("tracks") or []) if item]
+    return {
+        "playlistId": playlist_id,
+        "title": result["title"],
+        "author": author,
+        "description": result.get("description"),
+        "year": str(result["year"]) if result.get("year") else None,
+        "thumbnailUrl": cover,
+        "trackCount": result.get("trackCount") or len(tracks),
+        "durationSec": sum(t["durationSec"] or 0 for t in tracks),
+        "url": f"https://music.youtube.com/playlist?list={playlist_id}",
+        "tracks": tracks,
+    }

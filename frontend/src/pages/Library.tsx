@@ -4,7 +4,7 @@ import { AlbumCard, ArtistCard, Card, PlaylistCard } from '../components/Card';
 import { NewPlaylistDialog } from '../components/PlaylistDialogs';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
 import { Button, Chips, Icon, Status } from '../components/ui';
-import { useHistory, useLibraryAlbums, useLibraryArtists, useLiked, useMyPlaylists } from '../lib/queries';
+import { loadLikedTracks, useHistory, useLibraryAlbums, useLibraryArtists, useLiked, useMyPlaylists, usePlayCollection } from '../lib/queries';
 import type { Track } from '../lib/types';
 import { playTracks } from '../store/player';
 import { useAppDispatch } from '../store';
@@ -18,6 +18,7 @@ const grid = 'grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 xl:
 function PlaylistsTab() {
   const { data, isLoading } = useMyPlaylists();
   const [creating, setCreating] = useState(false);
+  const play = usePlayCollection();
   return (
     <div className={grid}>
       <button type="button" onClick={() => setCreating(true)} className="flex flex-col text-left" aria-label="New playlist">
@@ -26,7 +27,7 @@ function PlaylistsTab() {
         </span>
         <span className="mt-2 text-sm font-medium">New playlist</span>
       </button>
-      <Card title="Liked music" subtitle="Auto playlist" images={[]} href="/library?tab=songs" icon="thumb_up" />
+      <Card title="Liked music" subtitle="Auto playlist" images={[]} href="/library?tab=songs" icon="thumb_up" onPlay={() => play(loadLikedTracks)} />
       {isLoading && <TrackRowSkeleton />}
       {data?.map((p) => <PlaylistCard key={p.id} playlist={p} />)}
       {creating && <NewPlaylistDialog onClose={() => setCreating(false)} />}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { TrackMenu } from './TrackMenu';
 import { Icon, Thumb } from './ui';
 import { artistNames } from '../lib/format';
+import { loadPlaylistTracks, usePlayCollection } from '../lib/queries';
 import type { Album, Artist, Playlist, Track } from '../lib/types';
 import { playTracks } from '../store/player';
 import { useAppDispatch } from '../store';
@@ -40,14 +41,14 @@ export function Card({ title, subtitle, images, href, circle, onPlay, menu, icon
         ) : (
           art
         )}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/50 to-black/20 opacity-0 transition-opacity group-hover:opacity-100" />
         {menu && <div className="absolute right-1 top-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">{menu}</div>}
         {onPlay && (
           <button
             type="button"
             aria-label={`Play ${title}`}
             onClick={onPlay}
-            className="absolute bottom-2 right-2 flex h-10 w-10 items-center justify-center rounded-full bg-black/70 opacity-100 transition hover:scale-110 hover:bg-black sm:opacity-0 sm:group-hover:opacity-100"
+            className="absolute bottom-2 right-2 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900/80 opacity-100 backdrop-blur-sm transition hover:scale-110 hover:bg-neutral-800 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
           >
             <Icon name="play_arrow" fill />
           </button>
@@ -82,8 +83,10 @@ export function TrackCard({ track, tracks, index }: { track: Track; tracks: Trac
 }
 
 export function PlaylistCard({ playlist }: { playlist: Playlist }) {
+  const play = usePlayCollection();
   return (
     <Card
+      onPlay={() => play(loadPlaylistTracks(playlist.id))}
       title={playlist.name}
       subtitle={`Playlist • ${playlist.owner?.username ?? 'OpenWav'} • ${playlist.trackCount} tracks`}
       images={playlist.coverUrls}

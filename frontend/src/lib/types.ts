@@ -136,6 +136,19 @@ export interface OnlinePlaylist {
   url: string;
 }
 
+export interface OnlinePlaylistDetail {
+  playlistId: string;
+  title: string;
+  author: string | null;
+  description: string | null;
+  year: string | null;
+  thumbnailUrl: string | null;
+  trackCount: number;
+  durationSec: number;
+  url: string;
+  tracks: YoutubeResult[];
+}
+
 export interface OnlineResults {
   top: YoutubeResult | OnlineAlbum | OnlineArtist | null;
   songs: YoutubeResult[];
