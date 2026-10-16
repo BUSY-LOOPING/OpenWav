@@ -98,4 +98,13 @@ describe('admin', () => {
     const ok = await ctx.request.patch('/api/v1/admin/settings').set(as(admin)).send({ 'events.sample_rate': 0.5, 'alerts.p95_ms': 300 });
     expect(ok.body.data).toMatchObject({ 'events.sample_rate': 0.5, 'alerts.p95_ms': 300 });
   });
+
+  it('proxies recommender insights and reports when it is unreachable', async () => {
+    expect((await ctx.request.get('/api/v1/admin/recommender').set(as(user))).status).toBe(403);
+    expect((await ctx.request.get('/api/v1/admin/recommender').set(as(admin)).expect(200)).body.data.status.state).toBe('idle');
+    const down = buildApp({ recommender: { insights: async () => Promise.reject(new Error('ECONNREFUSED')) } });
+    const res = await down.request.get('/api/v1/admin/recommender').set(bearer(down.deps, admin));
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('UNAVAILABLE');
+  });
 });

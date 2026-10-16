@@ -2,7 +2,7 @@ import { HeadBucketCommand } from '@aws-sdk/client-s3';
 import { CANCEL_CHANNEL, TASK_STATUS, TERMINAL_TASK_STATUSES } from '@openwav/shared';
 import { Router } from 'express';
 import { z } from 'zod';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, notFound, unavailable } from '../lib/errors.js';
 import { cursorWhere, page, pageQuery, uuidParam, validate } from '../lib/http.js';
 import { trackInclude } from '../lib/serializers.js';
 import { deleteMediaObjects } from './browse.js';
@@ -286,6 +286,13 @@ export function adminRoutes(deps) {
   router.delete('/ytdlp/cookies', async (_req, res) => {
     await prisma.setting.deleteMany({ where: { key: 'ytdlp.cookies' } });
     res.status(204).end();
+  });
+
+  router.get('/recommender', async (_req, res) => {
+    const data = await recommender.insights().catch(() => {
+      throw unavailable('Recommender is unreachable');
+    });
+    res.json({ data });
   });
 
   router.post('/recommender/retrain', async (_req, res) => {

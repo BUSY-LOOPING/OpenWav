@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -87,6 +87,50 @@ class PgStore:
                 "ON CONFLICT (version) DO UPDATE SET trained_at = EXCLUDED.trained_at, meta = EXCLUDED.meta",
                 (version, trained_at, Jsonb(meta)),
             )
+
+    def load_params(self) -> Dict[str, Any]:
+        with self._connect() as conn:
+            return dict(conn.execute("SELECT key, value FROM settings WHERE key LIKE 'recommender.%'").fetchall())
+
+    def recent_models(self, limit: int = 20) -> List[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT version, trained_at, meta FROM recsys.models ORDER BY version DESC LIMIT %s", (limit,)
+            ).fetchall()
+        return [{**meta, "version": version, "trainedAt": trained_at.isoformat()} for version, trained_at, meta in rows]
+
+    def data_overview(self, days: int = 30, limit: int = 10) -> dict:
+        with self._connect() as conn:
+            total, users, items, positive = conn.execute(
+                "SELECT count(*), count(DISTINCT user_id), count(DISTINCT media_id), count(*) FILTER (WHERE weight > 0) "
+                "FROM recsys.interactions"
+            ).fetchone()
+            weights = conn.execute(
+                "SELECT weight, count(*) FROM recsys.interactions GROUP BY weight ORDER BY weight DESC"
+            ).fetchall()
+            daily = conn.execute(
+                "SELECT to_char(date_trunc('day', occurred_at), 'YYYY-MM-DD'), count(*) FROM recsys.interactions "
+                "WHERE occurred_at > now() - make_interval(days => %s) GROUP BY 1 ORDER BY 1",
+                (days,),
+            ).fetchall()
+            top = conn.execute(
+                "SELECT i.media_id::text, m.title, sum(i.weight), count(*) FROM recsys.interactions i "
+                "LEFT JOIN media m ON m.id = i.media_id GROUP BY i.media_id, m.title ORDER BY 3 DESC LIMIT %s",
+                (limit,),
+            ).fetchall()
+            recent = conn.execute(
+                "SELECT i.occurred_at, u.username, m.title, i.weight FROM recsys.interactions i "
+                "LEFT JOIN users u ON u.id = i.user_id LEFT JOIN media m ON m.id = i.media_id "
+                "ORDER BY i.occurred_at DESC LIMIT %s",
+                (limit * 2,),
+            ).fetchall()
+        return {
+            "totals": {"interactions": total, "users": users, "items": items, "positive": positive},
+            "weights": [{"weight": float(w), "count": c} for w, c in weights],
+            "daily": [{"day": d, "count": c} for d, c in daily],
+            "topItems": [{"mediaId": m, "title": t, "score": round(float(s), 3), "interactions": c} for m, t, s, c in top],
+            "recent": [{"occurredAt": at.isoformat(), "user": u, "title": t, "weight": float(w)} for at, u, t, w in recent],
+        }
 
     def ping(self) -> bool:
         with self._connect() as conn:

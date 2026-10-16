@@ -66,6 +66,12 @@ const GROUPS: { id: string; title: string; fields: Field[] }[] = [
     fields: [
       { key: 'recommender.enabled', label: 'Personalised recommendations', type: 'boolean' },
       { key: 'recommender.blend_content_weight', label: 'Content similarity weight', type: 'number', min: 0, max: 1, step: 0.05, hint: '0 = collaborative only, 1 = tags/artists only' },
+      { key: 'recommender.factors', label: 'Latent factors', type: 'number', min: 2, max: 256, hint: 'More captures finer taste, trains slower' },
+      { key: 'recommender.regularization', label: 'Regularization', type: 'number', min: 0, max: 10, step: 0.01, hint: 'Higher resists overfitting small data' },
+      { key: 'recommender.iterations', label: 'ALS iterations', type: 'number', min: 1, max: 50 },
+      { key: 'recommender.alpha', label: 'Confidence alpha', type: 'number', min: 1, max: 500, hint: 'How strongly repeat plays count' },
+      { key: 'recommender.half_life_days', label: 'Interest half-life (days)', type: 'number', min: 1, max: 365 },
+      { key: 'recommender.window_days', label: 'Training window (days)', type: 'number', min: 7, max: 3650, hint: 'Training params apply on the next retrain' },
     ],
   },
   {

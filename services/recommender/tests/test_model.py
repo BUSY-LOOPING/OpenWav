@@ -64,6 +64,14 @@ def test_als_recovers_co_listening_structure():
     assert scores[items.index("a3")] > max(scores[items.index(b)] for b in ("b1", "b2", "b3"))
 
 
+def test_als_reports_decreasing_loss_each_iteration():
+    _, _, matrix = build_matrix(_clustered(), NOW)
+    losses = []
+    als(matrix, factors=4, iterations=5, on_iteration=lambda i, loss: losses.append((i, loss)))
+    assert [i for i, _ in losses] == [1, 2, 3, 4, 5]
+    assert losses[-1][1] < losses[0][1]
+
+
 def test_trained_model_recommends_missing_cluster_item_first():
     model = Model.train(_clustered(), {}, now=NOW, factors=4, iterations=15, content_weight=0.0)
     top = model.recommend("new", limit=1)

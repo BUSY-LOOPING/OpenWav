@@ -24,6 +24,7 @@ const Users = lazy(() => import('./pages/admin/Users'));
 const Downloads = lazy(() => import('./pages/admin/Downloads'));
 const Media = lazy(() => import('./pages/admin/Media'));
 const Discovery = lazy(() => import('./pages/admin/Discovery'));
+const Recommender = lazy(() => import('./pages/admin/Recommender'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 
 const loading = <Spinner className="mx-auto mt-24" />;
@@ -88,6 +89,7 @@ export default function App() {
             <Route path="downloads" element={<Downloads />} />
             <Route path="media" element={<Media />} />
             <Route path="discovery" element={<Discovery />} />
+            <Route path="recommender" element={<Recommender />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>

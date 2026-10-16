@@ -67,6 +67,10 @@ Each result carries a `reason`: `cf` or `content`, whichever part contributed mo
 | `/similar` for a known track | Cosine of ALS item vectors blended with content cosine |
 | `/similar` for an unknown track | Popularity |
 
+## Tuning
+
+The factor count, regularisation, iteration count, confidence alpha, decay half-life, training window and content weight are settings under **Admin → Settings → Recommendations** (`recommender.*` keys). The recommender reads them at the start of each training run and clamps them to safe ranges, so a change takes effect on the next retrain. `RECOMMENDER_CONTENT_WEIGHT` is only the fallback for when no setting is stored.
+
 ## Cost and limits
 
 Training is dense numpy: memory is O(users × tracks), and each pass solves one small 32 × 32 system per user and per track. That is fine for thousands of users and tens of thousands of tracks on one CPU core, and the training time is exported as `recommender_train_duration_seconds`. Beyond that, replace `als()` with a sparse implementation such as the `implicit` library; the interface (`Model.train`, `recommend`, `similar`, `save`, `load`) stays the same.
@@ -78,5 +82,7 @@ Training is dense numpy: memory is O(users × tracks), and each pass solves one 
 | `recommender_train_duration_seconds` | Training time histogram |
 | `recommender_interactions{type}` | Interactions stored, by event type |
 | `RecommenderStale` alert | No retrain in 2 hours |
-| `recsys.models` | One row per trained version: users, items, seconds |
+| `recsys.models` | One row per trained version: users, items, interactions, density, params, per-iteration loss, seconds |
+| `GET /insights` | Live training state and loss, current params, recent runs, and a data overview (totals, event mix, daily counts, top tracks, latest interactions) |
+| **Admin → Recommender** | The page for all of the above. It polls every 1.5 s while training |
 | Logs | A `model trained` line with the version and counts |

@@ -268,3 +268,48 @@ export interface AdminUser extends User {
 }
 
 export type Settings = Record<string, unknown>;
+
+export interface RecommenderParams {
+  content_weight: number;
+  factors: number;
+  reg: number;
+  iterations: number;
+  alpha: number;
+  half_life_days: number;
+  window_days: number;
+}
+
+export interface RecommenderRun {
+  version: number;
+  trainedAt: string;
+  users: number;
+  items: number;
+  interactions?: number;
+  density?: number;
+  seconds: number;
+  loadSeconds?: number;
+  params?: RecommenderParams;
+  loss?: number[];
+}
+
+export interface RecommenderInsights {
+  status: {
+    state: 'idle' | 'loading' | 'training' | 'failed';
+    startedAt?: string;
+    finishedAt?: string;
+    iteration?: number;
+    loss?: number[];
+    params?: RecommenderParams;
+    error?: string | null;
+  };
+  model: { version: number; trainedAt: string | null; users: number; items: number };
+  params: RecommenderParams;
+  runs: RecommenderRun[];
+  data: {
+    totals: { interactions: number; users: number; items: number; positive: number };
+    weights: { weight: number; count: number }[];
+    daily: { day: string; count: number }[];
+    topItems: { mediaId: string; title: string | null; score: number; interactions: number }[];
+    recent: { occurredAt: string; user: string | null; title: string | null; weight: number }[];
+  };
+}
