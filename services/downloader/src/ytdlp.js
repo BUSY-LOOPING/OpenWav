@@ -6,6 +6,8 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 const PROGRESS = /^progress:(\d+)\/(\d+|NA)$/;
+const ENCODERS = { mp3: 'libmp3lame', m4a: 'aac', opus: 'libopus', flac: 'flac', wav: 'pcm_s16le' };
+const LOSSY = new Set(['mp3', 'm4a', 'opus']);
 const PERCENT = /\[download\]\s+([\d.]+)%/;
 
 export function parseProgress(line) {
@@ -117,7 +119,7 @@ export function createYtdlp({ bin = process.env.YTDLP_PATH || 'yt-dlp', spawnFn 
           '--audio-quality',
           quality.replace(/k$/, 'K'),
           '--postprocessor-args',
-          'ExtractAudio:-af loudnorm=I=-14:TP=-1.5:LRA=11',
+          `ExtractAudio:-af loudnorm=I=-14:TP=-1.5:LRA=11 -c:a ${ENCODERS[format]}${LOSSY.has(format) ? ` -b:a ${quality}` : ''}`,
           '--progress-template',
           'download:progress:%(progress.downloaded_bytes)s/%(progress.total_bytes,progress.total_bytes_estimate)s',
           '--print',
