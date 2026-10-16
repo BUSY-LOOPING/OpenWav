@@ -170,6 +170,22 @@ describe('home, explore and search', () => {
     expect(suggest.body.data).toEqual(['Blinding Lights', 'blinding lights remix']);
   });
 
+  it('previews a YouTube playlist without downloading and marks tracks already in the library', async () => {
+    const song = (videoId) => ({ type: 'song', videoId, url: `https://www.youtube.com/watch?v=${videoId}`, title: videoId, channel: 'X', thumbnailUrl: null, durationSec: 100 });
+    const fail = (status) => async () => Promise.reject(Object.assign(new Error('nope'), { status }));
+    ctx = buildApp({ scraper: { playlist: async (id) => ({ playlistId: id, title: 'Hotlist', tracks: [song(track.sourceId), song('fresh')] }) } });
+    const res = await ctx.request.get('/api/v1/search/playlist/PL1234567890').expect(200);
+    expect(res.body.data.title).toBe('Hotlist');
+    expect(res.body.data.tracks.map((t) => [t.videoId, t.downloaded, t.mediaId])).toEqual([
+      [track.sourceId, true, track.id],
+      ['fresh', false, null],
+    ]);
+    expect(await prisma.downloadTask.count()).toBe(0);
+    expect((await ctx.request.get('/api/v1/search/playlist/bad!id')).status).toBe(400);
+    expect((await buildApp({ scraper: { playlist: fail(404) } }).request.get('/api/v1/search/playlist/PL1234567890')).status).toBe(404);
+    expect((await buildApp({ scraper: { playlist: fail(502) } }).request.get('/api/v1/search/playlist/PL1234567890')).status).toBe(503);
+  });
+
   it('keeps working when the scraper fails', async () => {
     ctx = buildApp({ scraper: { search: async () => Promise.reject(new Error('blocked')), suggestions: async () => [], health: async () => ({}) } });
     const res = await ctx.request.get('/api/v1/search?q=blinding');

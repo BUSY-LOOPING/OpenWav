@@ -39,6 +39,14 @@ class FakeYTMusic:
             {"videoId": "next1", "title": "Next", "artists": [{"name": "B"}], "length": "2:05", "thumbnail": [{"url": "https://yt3.googleusercontent.com/n=w60-h60-l90", "width": 60, "height": 60}], "views": "1M"},
         ]}
 
+    def get_playlist(self, playlistId, limit=None):
+        self.calls.append(("playlist", playlistId, limit))
+        if self._error:
+            raise self._error
+        return {"title": "Hotlist", "author": {"name": "YouTube Music"}, "trackCount": 3,
+                "thumbnails": [{"url": "https://lh3.googleusercontent.com/p=w120-h120-l90", "width": 120, "height": 120}],
+                "tracks": [SONG, {"videoId": None, "title": "Unavailable"}, {**SONG, "videoId": "def", "duration_seconds": 61}]}
+
     def get_search_suggestions(self, q):
         self.calls.append(("suggest", q))
         return ["one", "two", {"not": "a string"}]
@@ -246,3 +254,21 @@ def test_related_falls_back_when_the_related_tab_breaks_the_library_parser():
     yt = Broken()
     assert client_for(yt).get("/related", params={"videoId": "seed123"}).json() == {"items": []}
     assert yt.calls == [("next", "RDAMVMseed123")]
+
+
+def test_playlist_lists_tracks_without_downloading_and_caches():
+    yt = FakeYTMusic()
+    client = client_for(yt)
+    item = client.get("/playlist", params={"id": "PL1234567890"}).json()["item"]
+    assert item["title"] == "Hotlist" and item["author"] == "YouTube Music"
+    assert item["thumbnailUrl"] == "https://lh3.googleusercontent.com/p=w544-h544-l90"
+    assert [t["videoId"] for t in item["tracks"]] == ["abc", "def"]
+    assert item["durationSec"] == 241
+    assert item["url"] == "https://music.youtube.com/playlist?list=PL1234567890"
+    client.get("/playlist", params={"id": "PL1234567890"})
+    assert [c for c in yt.calls if c[0] == "playlist"] == [("playlist", "PL1234567890", 300)]
+
+
+def test_playlist_validates_id_and_reports_upstream_failure():
+    assert client_for(FakeYTMusic()).get("/playlist", params={"id": "bad id!"}).status_code == 422
+    assert client_for(FakeYTMusic(error=RuntimeError("gone"))).get("/playlist", params={"id": "PL1234567890"}).status_code == 502

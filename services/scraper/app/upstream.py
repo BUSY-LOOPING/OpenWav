@@ -129,6 +129,9 @@ class Upstream:
     async def related(self, video_id: str) -> List[Dict[str, Any]]:
         return normalize.from_watch(await self._ytmusic_call(radio_tracks, video_id), video_id)
 
+    async def playlist(self, playlist_id: str) -> Optional[Dict[str, Any]]:
+        return normalize.playlist_detail(await self._ytmusic_call("get_playlist", playlist_id, limit=300), playlist_id)
+
     async def suggestions(self, q: str) -> List[str]:
         results = await self._ytmusic_call("get_search_suggestions", q)
         return [r for r in results or [] if isinstance(r, str)]

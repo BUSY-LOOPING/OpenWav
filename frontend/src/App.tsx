@@ -12,6 +12,7 @@ import Home from './pages/Home';
 import Library from './pages/Library';
 import NotFound from './pages/NotFound';
 import Playlist from './pages/Playlist';
+import OnlinePlaylist from './pages/OnlinePlaylist';
 import Search from './pages/Search';
 import SettingsPage from './pages/Settings';
 import Watch from './pages/Watch';
@@ -70,6 +71,7 @@ export default function App() {
             <Route path="library" element={<Library />} />
             <Route path="search" element={<Search />} />
             <Route path="playlist/:id" element={<Playlist />} />
+            <Route path="youtube/playlist/:id" element={<OnlinePlaylist />} />
             <Route path="album/:id" element={<Album />} />
             <Route path="artist/:id" element={<Artist />} />
             <Route path="watch/:id" element={<Watch />} />

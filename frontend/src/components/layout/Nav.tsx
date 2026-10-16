@@ -2,7 +2,30 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { NewPlaylistDialog } from '../PlaylistDialogs';
 import { Icon } from '../ui';
-import { useMyPlaylists } from '../../lib/queries';
+import { loadLikedTracks, loadPlaylistTracks, useMyPlaylists, usePlayCollection } from '../../lib/queries';
+import type { Track } from '../../lib/types';
+
+function SidePlaylist({ to, title, subtitle, load }: { to: string; title: string; subtitle: React.ReactNode; load: () => Promise<Track[]> }) {
+  const play = usePlayCollection();
+  return (
+    <li className="group relative">
+      <NavLink to={to} end className={({ isActive }) => `flex min-h-14 items-center rounded-lg py-2 pl-4 pr-14 hover:bg-white/15 group-focus-within:bg-white/15 ${isActive ? 'bg-white/10' : ''}`}>
+        <span className="min-w-0">
+          <span className="block truncate text-sm">{title}</span>
+          <span className="flex items-center gap-1 truncate text-xs text-muted">{subtitle}</span>
+        </span>
+      </NavLink>
+      <button
+        type="button"
+        onClick={() => play(load)}
+        aria-label={`Play ${title}`}
+        className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white text-black opacity-0 transition hover:scale-105 focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        <Icon name="play_arrow" fill />
+      </button>
+    </li>
+  );
+}
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home' },
@@ -43,23 +66,18 @@ export function SideNav({ expanded }: { expanded: boolean }) {
             <Icon name="add" /> New playlist
           </button>
           <ul className="thin-scrollbar flex-1 overflow-y-auto px-2 pb-4" aria-label="Your playlists">
-            <li>
-              <NavLink to="/library?tab=songs" className="flex items-center gap-3 rounded-lg px-4 py-2 hover:bg-white/10">
-                <span className="min-w-0">
-                  <span className="block truncate text-sm">Liked music</span>
-                  <span className="flex items-center gap-1 text-xs text-muted">
-                    <Icon name="push_pin" size={14} fill /> Auto playlist
-                  </span>
-                </span>
-              </NavLink>
-            </li>
+            <SidePlaylist
+              to="/library?tab=songs"
+              title="Liked music"
+              load={loadLikedTracks}
+              subtitle={
+                <>
+                  <Icon name="push_pin" size={14} fill /> Auto playlist
+                </>
+              }
+            />
             {playlists.map((p) => (
-              <li key={p.id}>
-                <NavLink to={`/playlist/${p.id}`} className={({ isActive }) => `block rounded-lg px-4 py-2 hover:bg-white/10 ${isActive ? 'bg-white/10' : ''}`}>
-                  <span className="block truncate text-sm">{p.name}</span>
-                  <span className="block truncate text-xs text-muted">{p.owner?.username}</span>
-                </NavLink>
-              </li>
+              <SidePlaylist key={p.id} to={`/playlist/${p.id}`} title={p.name} subtitle={p.owner?.username} load={loadPlaylistTracks(p.id)} />
             ))}
           </ul>
         </>

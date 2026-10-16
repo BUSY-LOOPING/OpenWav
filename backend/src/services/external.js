@@ -1,6 +1,6 @@
 const fetchJson = async (url, { timeoutMs = 3000, ...init } = {}) => {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-  if (!res.ok) throw new Error(`${url} responded ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`${url} responded ${res.status}`), { status: res.status });
   return res.status === 204 ? null : res.json();
 };
 
@@ -19,6 +19,7 @@ export function createScraper({ baseUrl, redis, ttlSec = 3600 }) {
       ),
     related: (videoId) =>
       cached(`scraper:related:${videoId}`, () => fetchJson(`${baseUrl}/related?videoId=${encodeURIComponent(videoId)}`, { timeoutMs: 10_000 }).then((r) => r.items)),
+    playlist: (id) => cached(`scraper:playlist:${id}`, () => fetchJson(`${baseUrl}/playlist?id=${encodeURIComponent(id)}`, { timeoutMs: 15_000 }).then((r) => r.item)),
     suggestions: (q) =>
       cached(`scraper:suggest:${q.toLowerCase().trim()}`, () => fetchJson(`${baseUrl}/suggestions?q=${encodeURIComponent(q)}`, { timeoutMs: 3000 }).then((r) => r.items)),
     health: () => fetchJson(`${baseUrl}/health`, { timeoutMs: 1000 }),
