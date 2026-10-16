@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import build_app
-from app.service import Service, to_row
+from app.service import DEFAULT_PARAMS, Service, resolve_params, to_row
 
 U1, U2, NEW = (f"00000000-0000-0000-0000-00000000000{i}" for i in (1, 2, 3))
 A, B, C = (f"00000000-0000-0000-0000-0000000000a{i}" for i in (1, 2, 3))
@@ -14,6 +14,7 @@ class FakeStore:
     def __init__(self):
         self.rows = {}
         self.models = []
+        self.params = {}
 
     def ensure_schema(self):
         pass
@@ -34,6 +35,15 @@ class FakeStore:
 
     def save_model(self, version, trained_at, meta):
         self.models.append((version, meta))
+
+    def load_params(self):
+        return self.params
+
+    def recent_models(self, limit=20):
+        return [{**meta, "version": version} for version, meta in reversed(self.models)][:limit]
+
+    def data_overview(self):
+        return {"totals": {"interactions": len(self.rows)}}
 
 
 def event(event_id, kind, user, media):
@@ -106,3 +116,42 @@ def test_validation_health_and_metrics(setup):
     body = client.get("/metrics").text
     assert 'http_request_duration_seconds_bucket{le="0.005",method="GET",route="/health",status="200"}' in body
     assert "recommender_interactions_total" in body
+
+
+def test_resolve_params_clamps_and_ignores_bad_types():
+    params = resolve_params({"recommender.factors": 9999, "recommender.iterations": True, "recommender.regularization": "x",
+                             "recommender.blend_content_weight": -1, "recommender.alpha": 12.5})
+    assert params["factors"] == 256
+    assert params["iterations"] == DEFAULT_PARAMS["iterations"]
+    assert params["reg"] == DEFAULT_PARAMS["reg"]
+    assert params["content_weight"] == 0.0
+    assert params["alpha"] == 12.5
+
+
+def test_training_uses_stored_params_and_reports_insights(setup, tmp_path):
+    store, service, client = setup
+    store.params = {"recommender.iterations": 3, "recommender.factors": 4, "recommender.blend_content_weight": 0.6}
+    service.record([event("1", "play_complete", U1, A), event("2", "like", U2, B), event("3", "like", U2, A)])
+    assert service.train()
+
+    _, meta = store.models[-1]
+    assert meta["params"]["iterations"] == 3 and meta["params"]["factors"] == 4
+    assert len(meta["loss"]) == 3 and meta["loss"][-1] <= meta["loss"][0]
+    assert meta["interactions"] == 3 and 0 < meta["density"] <= 1
+    assert service.model.user_factors.shape[1] == 4
+    assert Service(store, str(tmp_path)).model.content_weight == 0.6
+
+    body = client.get("/insights").json()
+    assert body["status"]["state"] == "idle" and body["status"]["iteration"] == 3
+    assert body["model"]["users"] == 2
+    assert body["params"]["content_weight"] == 0.6
+    assert body["runs"][0]["loss"] == meta["loss"]
+    assert body["data"]["totals"]["interactions"] == 3
+
+
+def test_failed_training_is_reported(setup):
+    store, service, client = setup
+    store.load_content = lambda: (_ for _ in ()).throw(RuntimeError("db down"))
+    service._safe_train()
+    status = client.get("/insights").json()["status"]
+    assert status["state"] == "failed" and status["error"] == "db down"

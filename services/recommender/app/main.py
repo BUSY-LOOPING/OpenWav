@@ -23,6 +23,15 @@ def _ids(raw: Optional[str]) -> List[str]:
     return [part.strip() for part in raw.split(",") if part.strip()] if raw else []
 
 
+def _summary(model) -> dict:
+    return {
+        "version": model.version,
+        "trainedAt": model.trained_at.isoformat() if model.trained_at else None,
+        "users": len(model.users),
+        "items": len(model.items),
+    }
+
+
 def build_app(service: Service, background: Optional[dict] = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -73,12 +82,16 @@ def build_app(service: Service, background: Optional[dict] = None) -> FastAPI:
 
     @app.get("/model")
     def model():
-        current = service.model
+        return _summary(service.model)
+
+    @app.get("/insights")
+    def insights():
         return {
-            "version": current.version,
-            "trainedAt": current.trained_at.isoformat() if current.trained_at else None,
-            "users": len(current.users),
-            "items": len(current.items),
+            "status": service.status,
+            "model": _summary(service.model),
+            "params": service.params(),
+            "runs": service.store.recent_models(),
+            "data": service.store.data_overview(),
         }
 
     @app.exception_handler(Exception)
