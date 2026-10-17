@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SeekBar, TransportControls } from './PlayerBar';
 import { TrackMenu } from '../components/TrackMenu';
@@ -6,6 +6,7 @@ import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
 import { YoutubeRow } from '../components/YoutubeRow';
 import { Icon, IconButton, Spinner, Thumb } from '../components/ui';
 import { formatTime } from '../lib/format';
+import { useMediaQuery } from '../lib/useMediaQuery';
 import { useLyrics, useRelated, useToggleLike } from '../lib/queries';
 import { jumpTo, moveInQueue, removeFromQueue, setNowPlayingOpen } from '../store/player';
 import { selectCurrentTrack, useAppDispatch, useAppSelector } from '../store';
@@ -121,8 +122,15 @@ export function NowPlaying() {
   const [tab, setTab] = useState<Tab>('upnext');
   const touchStart = useRef<number | null>(null);
   const [dragY, setDragY] = useState(0);
+  const [visible, setVisible] = useState(open);
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 
-  if (!open || !track) return null;
+  useEffect(() => {
+    if (open) setVisible(true);
+    else if (reduceMotion) setVisible(false);
+  }, [open, reduceMotion]);
+
+  if (!(open || visible) || !track) return null;
   const close = () => dispatch(setNowPlayingOpen(false));
 
   return (
@@ -130,9 +138,15 @@ export function NowPlaying() {
       role="dialog"
       aria-modal="true"
       aria-label="Now playing"
-      className="fixed inset-0 z-[200] flex flex-col bg-canvas md:absolute md:z-30 md:pb-[72px]"
+      aria-hidden={!open}
+      className={`fixed inset-0 z-[200] flex flex-col bg-canvas md:absolute md:z-30 md:pb-[72px] ${open ? 'animate-sheet-up' : 'pointer-events-none animate-sheet-down'} motion-reduce:animate-none`}
       style={{ transform: dragY ? `translateY(${dragY}px)` : undefined }}
       onKeyDown={(e) => e.key === 'Escape' && close()}
+      onAnimationEnd={(e) => {
+        if (e.target !== e.currentTarget || open) return;
+        setVisible(false);
+        setDragY(0);
+      }}
     >
       <div
         className="flex h-14 shrink-0 items-center justify-between px-2 md:hidden"
@@ -140,7 +154,7 @@ export function NowPlaying() {
         onTouchMove={(e) => touchStart.current !== null && setDragY(Math.max(0, e.touches[0].clientY - touchStart.current))}
         onTouchEnd={() => {
           if (dragY > 120) close();
-          setDragY(0);
+          else setDragY(0);
           touchStart.current = null;
         }}
       >

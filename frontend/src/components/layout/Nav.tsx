@@ -33,12 +33,12 @@ const NAV = [
   { to: '/library', label: 'Library', icon: 'library_music' },
 ];
 
-export function SideNav({ expanded }: { expanded: boolean }) {
+export function SideNav({ expanded, drawer = false }: { expanded: boolean; drawer?: boolean }) {
   const [creating, setCreating] = useState(false);
   const { data: playlists = [] } = useMyPlaylists();
 
   return (
-    <nav aria-label="Main" className={`hidden shrink-0 flex-col overflow-hidden border-r border-white/5 bg-canvas md:flex ${expanded ? 'w-60' : 'w-[72px]'}`}>
+    <nav aria-label="Main" className={`flex-col overflow-hidden bg-canvas ${drawer ? 'flex min-h-0 flex-1' : `hidden shrink-0 border-r border-white/5 md:flex ${expanded ? 'w-60' : 'w-[72px]'}`}`}>
       <ul className="flex flex-col gap-1 p-2">
         {NAV.map((item) => (
           <li key={item.to}>
@@ -107,3 +107,4 @@ export function BottomNav() {
     </nav>
   );
 }
+// Edited by Claude Code

@@ -17,12 +17,13 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function IconButton({ icon, label, fill, size, active, className = '', ...props }: IconButtonProps) {
+  const display = /(^|\s)hidden(\s|$)/.test(className) ? '' : 'inline-flex';
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full p-2 transition-colors hover:bg-white/10 disabled:opacity-40 ${active ? 'text-white' : ''} ${className}`}
+      className={`${display} shrink-0 items-center justify-center rounded-full p-2 transition-colors hover:bg-white/10 disabled:opacity-40 ${active ? 'text-white' : ''} ${className}`}
       {...props}
     >
       <Icon name={icon} fill={fill} size={size} />

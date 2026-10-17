@@ -118,7 +118,7 @@ export function TopBar({ onMenu, onShortcuts }: { onMenu: () => void; onShortcut
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-white/5 bg-canvas/95 px-2 backdrop-blur sm:px-4">
-      <IconButton icon="menu" label="Guide" onClick={onMenu} className="hidden md:inline-flex" />
+      <IconButton icon="menu" label="Guide" onClick={onMenu} />
       <Logo />
       <div className="mx-auto hidden w-full max-w-xl px-4 md:block">
         <SearchBox />
