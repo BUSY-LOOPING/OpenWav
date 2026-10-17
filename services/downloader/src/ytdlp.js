@@ -53,7 +53,7 @@ export function parsePlaylist(raw, fallbackUrl) {
     title: raw.title ?? null,
     entries: raw.entries
       .filter((e) => e && (e.url || e.id))
-      .map((e) => ({ url: e.url?.startsWith('http') ? e.url : `https://www.youtube.com/watch?v=${e.id}`, title: e.title ?? null })),
+      .map((e) => ({ url: e.url?.startsWith('http') ? e.url : `https://www.youtube.com/watch?v=${e.id}` })),
   };
 }
 

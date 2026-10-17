@@ -9,46 +9,14 @@ const inFlight = gauge('downloads_in_flight', 'Downloads currently running');
 export const slugify = (value) =>
   value.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 200) || 'unknown';
 
-const sourceIdOf = (raw) => {
-  const url = new URL(raw);
-  return url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v');
-};
-
 export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publishRetry, tempDir, logger }) {
   const controllers = new Map();
 
-  function findExisting(url, format) {
-    const sourceId = sourceIdOf(url);
-    return prisma.media.findFirst({ where: { status: 'completed', OR: [{ url, format }, ...(sourceId ? [{ sourceId }] : [])] }, select: { id: true } });
-  }
-
-  async function linkToPlaylist(tx, job, mediaId) {
-    if (!job.playlistId) return;
-    const { _max } = await tx.playlistTrack.aggregate({ where: { playlistId: job.playlistId }, _max: { position: true } });
-    await tx.playlistTrack.upsert({
-      where: { playlistId_mediaId: { playlistId: job.playlistId, mediaId } },
-      create: { playlistId: job.playlistId, mediaId, addedBy: job.userId, position: job.position ?? (_max.position ?? 0) + 1 },
-      update: {},
-    });
-    const [{ count, total }] = await tx.$queryRaw`
-      SELECT count(*)::int AS count, coalesce(sum(m.duration), 0)::int AS total
-      FROM playlist_tracks pt JOIN media m ON m.id = pt.media_id WHERE pt.playlist_id = ${job.playlistId}::uuid`;
-    await tx.playlist.update({ where: { id: job.playlistId }, data: { totalTracks: count, totalDuration: total } });
-  }
-
-  const completeTask = (tx, taskId, mediaId) =>
-    tx.downloadTask.update({ where: { id: taskId }, data: { status: TASK_STATUS.completed, progress: 100, mediaId, completedAt: new Date(), errorMessage: null } });
-
   async function finishPlaylistTask(playlistTaskId) {
     if (!playlistTaskId) return;
-    const [parent, counts] = await Promise.all([
-      prisma.playlistTask.findUnique({ where: { id: playlistTaskId }, select: { totalTracks: true } }),
-      prisma.downloadTask.groupBy({ by: ['status'], where: { playlistTaskId }, _count: true }),
-    ]);
-    const created = counts.reduce((n, c) => n + c._count, 0);
+    const counts = await prisma.downloadTask.groupBy({ by: ['status'], where: { playlistTaskId }, _count: true });
     const pending = counts.filter((c) => !TERMINAL_TASK_STATUSES.includes(c.status)).reduce((n, c) => n + c._count, 0);
-    // Children finishing while the playlist is still fanning out must not close it early
-    if (pending || created < (parent?.totalTracks ?? 0)) return;
+    if (pending) return;
     const completed = counts.find((c) => c.status === TASK_STATUS.completed)?._count ?? 0;
     await prisma.playlistTask.updateMany({
       where: { id: playlistTaskId, status: { not: PLAYLIST_TASK_STATUS.cancelled } },
@@ -94,8 +62,19 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
         });
         await tx.mediaAlbum.upsert({ where: { mediaId_albumId: { mediaId: media.id, albumId: album.id } }, create: { mediaId: media.id, albumId: album.id }, update: {} });
       }
-      await linkToPlaylist(tx, job, media.id);
-      await completeTask(tx, task.id, media.id);
+      if (job.playlistId) {
+        const { _max } = await tx.playlistTrack.aggregate({ where: { playlistId: job.playlistId }, _max: { position: true } });
+        await tx.playlistTrack.upsert({
+          where: { playlistId_mediaId: { playlistId: job.playlistId, mediaId: media.id } },
+          create: { playlistId: job.playlistId, mediaId: media.id, addedBy: job.userId, position: job.position ?? (_max.position ?? 0) + 1 },
+          update: {},
+        });
+        const [{ count, total }] = await tx.$queryRaw`
+          SELECT count(*)::int AS count, coalesce(sum(m.duration), 0)::int AS total
+          FROM playlist_tracks pt JOIN media m ON m.id = pt.media_id WHERE pt.playlist_id = ${job.playlistId}::uuid`;
+        await tx.playlist.update({ where: { id: job.playlistId }, data: { totalTracks: count, totalDuration: total } });
+      }
+      await tx.downloadTask.update({ where: { id: task.id }, data: { status: TASK_STATUS.completed, progress: 100, mediaId: media.id, completedAt: new Date(), errorMessage: null } });
       return media;
     });
   }
@@ -104,17 +83,6 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
     const task = await prisma.downloadTask.findUnique({ where: { id: job.taskId } });
     if (!task || task.status === TASK_STATUS.cancelled || task.status === TASK_STATUS.completed) return 'skipped';
     const say = (status, progress = null, title = null, error = null) => emit({ taskId: task.id, status, progress, title, error, userId: job.userId });
-    const existing = await findExisting(job.url, job.format);
-    if (existing) {
-      await prisma.$transaction(async (tx) => {
-        await linkToPlaylist(tx, job, existing.id);
-        await completeTask(tx, task.id, existing.id);
-      });
-      say(TASK_STATUS.completed, 100, task.title);
-      jobs.inc({ status: 'existing' });
-      await finishPlaylistTask(job.playlistTaskId);
-      return existing.id;
-    }
     const controller = new AbortController();
     controllers.set(task.id, controller);
     const stop = duration.startTimer();
@@ -199,21 +167,11 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
       }
       await prisma.playlistTask.update({ where: { id: task.id }, data: { status: PLAYLIST_TASK_STATUS.downloading, totalTracks: entries.length } });
       for (const [i, entry] of entries.entries()) {
-        const childJob = { url: entry.url, format: job.format, quality: job.quality, userId: job.userId, playlistTaskId: task.id, playlistId: job.playlistId, position: i + 1 };
-        const data = { url: entry.url, title: entry.title?.slice(0, 500), requestedBy: job.userId, format: job.format, quality: job.quality, playlistTaskId: task.id, targetPlaylistId: job.playlistId, position: i + 1 };
-        const existing = await findExisting(entry.url, job.format);
-        if (existing) {
-          await prisma.$transaction(async (tx) => {
-            const child = await tx.downloadTask.create({ data });
-            await linkToPlaylist(tx, childJob, existing.id);
-            await completeTask(tx, child.id, existing.id);
-          });
-          continue;
-        }
-        const child = await prisma.downloadTask.create({ data });
-        await publishDownload({ taskId: child.id, ...childJob });
+        const child = await prisma.downloadTask.create({
+          data: { url: entry.url, requestedBy: job.userId, format: job.format, quality: job.quality, playlistTaskId: task.id, targetPlaylistId: job.playlistId, position: i + 1 },
+        });
+        await publishDownload({ taskId: child.id, url: entry.url, format: job.format, quality: job.quality, userId: job.userId, playlistTaskId: task.id, playlistId: job.playlistId, position: i + 1 });
       }
-      await finishPlaylistTask(task.id);
       return entries.length;
     } catch (err) {
       await prisma.playlistTask.update({ where: { id: task.id }, data: { status: PLAYLIST_TASK_STATUS.failed, errorMessage: err.message.slice(0, 2000) } });

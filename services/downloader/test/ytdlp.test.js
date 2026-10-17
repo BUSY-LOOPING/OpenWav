@@ -35,12 +35,9 @@ describe('parsers', () => {
   });
 
   it('expands flat playlists to watch URLs', () => {
-    expect(parsePlaylist({ title: 'P', entries: [{ id: 'a', title: 'Song A' }, null, { url: 'https://youtu.be/b' }] }, 'x')).toEqual({
+    expect(parsePlaylist({ title: 'P', entries: [{ id: 'a' }, null, { url: 'https://youtu.be/b' }] }, 'x')).toEqual({
       title: 'P',
-      entries: [
-        { url: 'https://www.youtube.com/watch?v=a', title: 'Song A' },
-        { url: 'https://youtu.be/b', title: null },
-      ],
+      entries: [{ url: 'https://www.youtube.com/watch?v=a' }, { url: 'https://youtu.be/b' }],
     });
   });
 });
