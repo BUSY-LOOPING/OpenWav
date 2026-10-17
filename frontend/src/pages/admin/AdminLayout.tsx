@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Logo } from '../../components/layout/TopBar';
 import { Icon } from '../../components/ui';
+import { api } from '../../lib/api';
 
 const LINKS = [
   { to: '/admin', label: 'Dashboard', icon: 'monitoring', end: true },
@@ -13,6 +15,10 @@ const LINKS = [
 ];
 
 export default function AdminLayout() {
+  useEffect(() => {
+    api.post('/admin/ops-session').catch(() => {});
+  }, []);
+
   return (
     <div className="flex h-full flex-col md:flex-row">
       <aside className="shrink-0 border-b border-white/10 bg-canvas md:w-60 md:border-b-0 md:border-r">

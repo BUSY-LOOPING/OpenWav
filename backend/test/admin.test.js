@@ -12,6 +12,20 @@ beforeEach(async () => {
 const as = (who) => bearer(ctx.deps, who);
 
 describe('admin', () => {
+  it('gates ops tools behind an admin-only session cookie', async () => {
+    const check = (cookie) => ctx.request.get('/api/v1/admin/ops-check').set(cookie ? { Cookie: cookie } : {});
+    expect((await check()).status).toBe(401);
+    expect((await ctx.request.post('/api/v1/admin/ops-session').set(as(user))).status).toBe(403);
+    const res = await ctx.request.post('/api/v1/admin/ops-session').set(as(admin)).expect(204);
+    const cookie = res.headers['set-cookie'][0];
+    expect(cookie).toMatch(/HttpOnly/);
+    expect(cookie).toMatch(/SameSite=Strict/);
+    expect((await check(cookie.split(';')[0])).status).toBe(204);
+    expect((await check('ow_ops=forged')).status).toBe(401);
+    await prisma.user.update({ where: { id: admin.id }, data: { role: 'user' } });
+    expect((await check(cookie.split(';')[0])).status).toBe(401);
+  });
+
   it('is admin only', async () => {
     expect((await ctx.request.get('/api/v1/admin/stats').set(as(user))).status).toBe(403);
     expect((await ctx.request.get('/api/v1/admin/stats')).status).toBe(401);

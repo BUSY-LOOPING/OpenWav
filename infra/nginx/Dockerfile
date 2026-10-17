@@ -21,6 +21,7 @@ COPY infra/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY infra/nginx/templates /etc/nginx/templates
 COPY infra/nginx/spa /etc/nginx/spa
 COPY infra/nginx/certs.sh /docker-entrypoint.d/05-certs.sh
+COPY infra/nginx/ops.conf /etc/nginx/ops/ops.conf
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 RUN chmod +x /docker-entrypoint.d/05-certs.sh
 ENV SPA_MODE=static UPSTREAM_API=backend:3000 UPSTREAM_STORAGE=rustfs:9000 S3_BUCKET_AUDIO=audio S3_BUCKET_COVERS=covers AUDIO_CACHE_MAX_SIZE=20g COVER_CACHE_MAX_SIZE=2g

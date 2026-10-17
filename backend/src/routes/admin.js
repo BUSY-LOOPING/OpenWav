@@ -29,10 +29,31 @@ const statusList = z
   .transform((v) => (v ? v.split(',') : undefined))
   .pipe(z.array(z.enum(Object.values(TASK_STATUS))).optional());
 
+const OPS_COOKIE = 'ow_ops';
+const OPS_SESSION_SEC = 12 * 3600;
+
+export function opsCheck({ prisma, tokens }) {
+  return async (req, res) => {
+    const ticket = req.headers.cookie?.match(/(?:^|;\s*)ow_ops=([^;]+)/)?.[1];
+    let userId = null;
+    try {
+      userId = ticket ? tokens.verifyTicket(ticket, 'ops') : null;
+    } catch {}
+    const user = userId && (await prisma.user.findUnique({ where: { id: userId }, select: { role: true, isActive: true } }));
+    res.status(user?.role === 'admin' && user.isActive ? 204 : 401).end();
+  };
+}
+
 export function adminRoutes(deps) {
-  const { prisma, redis, auth, serialize, downloads, settings, storage, config, monitoring, recommender, scraper, channel, producerReady } = deps;
+  const { prisma, redis, auth, tokens, serialize, downloads, settings, storage, config, monitoring, recommender, scraper, channel, producerReady } = deps;
   const router = Router();
   router.use(auth.authenticate, auth.requireAdmin);
+
+  router.post('/ops-session', (req, res) => {
+    const { ticket } = tokens.signTicket(req.user.id, 'ops', OPS_SESSION_SEC);
+    res.cookie(OPS_COOKIE, ticket, { httpOnly: true, secure: true, sameSite: 'strict', path: '/', maxAge: OPS_SESSION_SEC * 1000 });
+    res.status(204).end();
+  });
 
   router.get('/stats', async (_req, res) => {
     const day = new Date(Date.now() - 86_400_000);
@@ -97,7 +118,7 @@ export function adminRoutes(deps) {
         { name: 'Prometheus', description: 'Metrics and alert rules', url: config.OPS_PROMETHEUS_URL, check: `${config.PROMETHEUS_URL}/-/healthy` },
         { name: 'Alertmanager', description: 'Active alerts and silences', url: config.OPS_ALERTMANAGER_URL, check: `${config.ALERTMANAGER_URL}/-/healthy` },
         { name: 'RabbitMQ', description: 'Download queues and dead letters', url: config.OPS_RABBITMQ_URL, check: config.RABBITMQ_UI_URL },
-        { name: 'Prisma Studio', description: 'Runs on your machine only while npm run db:studio is running', url: config.OPS_PRISMA_STUDIO_URL, check: null },
+        { name: 'Prisma Studio', description: 'Browse and edit database rows', url: config.OPS_PRISMA_STUDIO_URL, check: config.PRISMA_STUDIO_URL ?? null },
       ].map(async ({ check, ...link }) => ({ ...link, status: check ? await reachable(check) : 'manual' })),
     );
     res.json({ data: { services, http: await monitoring.latency(), links } });
@@ -302,3 +323,4 @@ export function adminRoutes(deps) {
 
   return router;
 }
+// Edited by Claude Code

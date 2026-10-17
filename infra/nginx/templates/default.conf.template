@@ -134,5 +134,6 @@ server {
     add_header X-Cache-Status $upstream_cache_status always;
   }
 
+  include /etc/nginx/ops/*.conf;
   include /etc/nginx/spa/${SPA_MODE}.conf;
 }
