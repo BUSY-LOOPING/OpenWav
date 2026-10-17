@@ -5,12 +5,13 @@ import { Dialog } from '../components/Dialog';
 import { Menu } from '../components/Menu';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
 import { toast } from '../lib/toast';
-import { Button, Icon, IconButton, Status, inputClass } from '../components/ui';
+import { Button, Icon, IconButton, Status, Thumb, inputClass } from '../components/ui';
+import { ytFallback } from '../components/youtubeResult';
 import { errorMessage } from '../lib/api';
 import { formatDuration } from '../lib/format';
 import { useTaskProgress } from '../lib/progress';
 import { usePlaylist, usePlaylistMutations } from '../lib/queries';
-import type { PlaylistDetail, PlaylistImport, PlaylistTrack, TaskStatus } from '../lib/types';
+import type { PlaylistDetail, PlaylistImport, PlaylistTrack } from '../lib/types';
 import { playTracks } from '../store/player';
 import { useAppDispatch } from '../store';
 
@@ -60,59 +61,52 @@ function EditDialog({ playlist, onClose }: { playlist: PlaylistDetail; onClose: 
   );
 }
 
-function TaskState({ status, progress }: { status: TaskStatus; progress: number }) {
-  if (status === 'completed')
-    return (
-      <span className="text-emerald-400">
-        <Icon name="check_circle" />
-        <span className="sr-only">Downloaded</span>
-      </span>
-    );
-  if (status === 'failed' || status === 'cancelled') return <span className="text-xs text-red-300">{status === 'failed' ? 'Failed' : 'Cancelled'}</span>;
-  if (status === 'queued') return <span className="text-xs text-muted">Waiting</span>;
+type ImportTask = PlaylistImport['tasks'][number];
+
+const videoIdOf = (raw: string) => {
+  const url = new URL(raw);
+  return url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v');
+};
+
+function PendingRow({ task }: { task: ImportTask }) {
+  const videoId = videoIdOf(task.url);
+  const failed = task.status === 'failed' || task.status === 'cancelled';
   return (
-    <span className="flex w-24 items-center gap-2 text-xs text-muted">
-      <span className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
-        <span className="block h-full bg-accent transition-[width]" style={{ width: `${progress}%` }} />
-      </span>
-      {progress}%
-    </span>
+    <div role="row" aria-busy={!failed} className="flex min-h-14 items-center gap-3 px-2 py-1.5 opacity-50 sm:px-3">
+      <Thumb src={videoId ? ytFallback(videoId) : null} alt="" className="h-10 w-10 shrink-0 grayscale sm:h-12 sm:w-12" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{task.title ?? 'Loading…'}</p>
+        {failed ? (
+          <p className="text-sm text-red-300">Couldn't download</p>
+        ) : (
+          <div className="mt-2 h-1 w-full max-w-xs overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={`Downloading ${task.title ?? 'track'}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}>
+            <div className="h-full bg-accent transition-[width]" style={{ width: `${task.progress}%` }} />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-function ImportProgress({ job }: { job: PlaylistImport }) {
-  const live = useTaskProgress(job.tasks.map((t) => t.id));
-  const tasks = job.tasks.map((t) => {
+function useImportTasks(job: PlaylistImport | null) {
+  const tasks = job?.tasks ?? [];
+  const live = useTaskProgress(tasks.map((t) => t.id));
+  return tasks.map((t) => {
     const e = live[t.id];
     return e ? { ...t, status: e.status, progress: e.progress ?? t.progress, title: t.title ?? e.title } : t;
   });
+}
+
+function ImportBar({ job, tasks }: { job: PlaylistImport; tasks: ImportTask[] }) {
   const total = job.total || tasks.length;
   const done = tasks.filter((t) => t.status === 'completed').length;
   return (
-    <section aria-label="Import progress" className="mb-6 rounded-xl bg-white/5 p-4">
-      <div className="flex items-center justify-between gap-4 text-sm">
-        <p className="font-medium">{job.status === 'downloading' ? 'Importing playlist' : 'Fetching playlist…'}</p>
-        {total > 0 && (
-          <p className="text-muted">
-            {done} of {total} downloaded
-          </p>
-        )}
-      </div>
+    <div className="mb-4 px-2 sm:px-3">
+      <p className="text-sm text-muted">{total ? `Downloading ${done} of ${total}` : 'Fetching playlist…'}</p>
       <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Import progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         <div className="h-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
       </div>
-      {tasks.length > 0 && (
-        <ol className="thin-scrollbar mt-3 max-h-96 overflow-y-auto">
-          {tasks.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
-              <span className="w-6 shrink-0 text-right text-muted">{t.position}</span>
-              <span className="min-w-0 flex-1 truncate">{t.title ?? t.url}</span>
-              <TaskState status={t.status} progress={t.progress} />
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
+    </div>
   );
 }
 
@@ -128,6 +122,7 @@ export default function Playlist() {
   const dragFrom = useRef<number | null>(null);
 
   useEffect(() => setOrder(playlist?.tracks ?? []), [playlist?.tracks]);
+  const importTasks = useImportTasks(playlist?.import ?? null);
 
   if (isLoading)
     return (
@@ -140,6 +135,12 @@ export default function Playlist() {
   if (isError || !playlist) return <Status icon="playlist_remove" title="This playlist isn't available" message="It may be private or deleted." />;
 
   const owner = playlist.isOwner;
+  // Tracks still downloading sit at their playlist position until they land in the track list
+  const pending = importTasks.filter((t) => t.status !== 'completed' && t.position !== null);
+  const rows = pending.length
+    ? [...order.map((t, i) => ({ t, i, at: t.position })), ...pending.map((task) => ({ task, at: task.position ?? 0 }))].sort((a, b) => a.at - b.at)
+    : order.map((t, i) => ({ t, i }));
+  const canDrag = owner && !pending.length;
   const play = (shuffle: boolean) => order.length && dispatch(playTracks({ tracks: order, shuffle }));
 
   function drop(to: number) {
@@ -193,41 +194,45 @@ export default function Playlist() {
               {owner ? (
                 <IconButton icon="edit" label="Edit playlist" onClick={() => setEditing(true)} className="h-10 w-10 bg-white/10" />
               ) : (
-                <IconButton
-                  icon={playlist.saved ? 'library_add_check' : 'library_add'}
-                  label={playlist.saved ? 'Remove from library' : 'Save to library'}
-                  onClick={() => mutations.save.mutate(!playlist.saved)}
-                  className="h-10 w-10 bg-white/10"
-                />
-              )}
-              <PlayButtons onPlay={() => play(false)} onShuffle={() => play(true)} disabled={!order.length} />
-              {owner && <Menu label="Playlist actions" items={ownerMenu} trigger={(props) => <IconButton {...props} icon="more_vert" label="More playlist actions" className="h-10 w-10 bg-white/10" />} />}
-            </>
-          }
-        />
-      </div>
-      <div className="min-w-0 flex-1 pb-6 xl:pt-6">
-        {playlist.import && <ImportProgress job={playlist.import} />}
-        {!order.length && !playlist.import && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
-        <div role="table" aria-label="Tracks">
-          {order.map((t, i) => (
-            <TrackRow
-              key={t.id}
-              track={t}
-              tracks={order}
-              index={i}
-              onRemove={owner ? () => mutations.removeTrack.mutate(t.id) : undefined}
-              drag={
-                owner
-                  ? {
-                      onDragStart: () => (dragFrom.current = i),
-                      onDragOver: (e) => e.preventDefault(),
-                      onDrop: () => drop(i),
-                    }
-                  : undefined
-              }
-            />
-          ))}
+                  <IconButton
+                    icon={playlist.saved ? 'library_add_check' : 'library_add'}
+                    label={playlist.saved ? 'Remove from library' : 'Save to library'}
+                    onClick={() => mutations.save.mutate(!playlist.saved)}
+                    className="h-10 w-10 bg-white/10"
+                  />
+                )}
+                <PlayButtons onPlay={() => play(false)} onShuffle={() => play(true)} disabled={!order.length} />
+                {owner && <Menu label="Playlist actions" items={ownerMenu} trigger={(props) => <IconButton {...props} icon="more_vert" label="More playlist actions" className="h-10 w-10 bg-white/10" />} />}
+              </>
+            }
+          />
+        </div>
+        <div className="min-w-0 flex-1 pb-6 xl:pt-6">
+          {playlist.import && <ImportBar job={playlist.import} tasks={importTasks} />}
+          {!order.length && !playlist.import && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
+          <div role="table" aria-label="Tracks">
+            {rows.map((row) =>
+              'task' in row ? (
+                <PendingRow key={row.task.id} task={row.task} />
+              ) : (
+              <TrackRow
+                key={row.t.id}
+                track={row.t}
+                tracks={order}
+                index={row.i}
+                onRemove={owner ? () => mutations.removeTrack.mutate(row.t.id) : undefined}
+                drag={
+                  canDrag
+                    ? {
+                        onDragStart: () => (dragFrom.current = row.i),
+                        onDragOver: (e) => e.preventDefault(),
+                        onDrop: () => drop(row.i),
+                      }
+                    : undefined
+                }
+              />
+            ),
+          )}
         </div>
       </div>
       {editing && <EditDialog playlist={playlist} onClose={() => setEditing(false)} />}
