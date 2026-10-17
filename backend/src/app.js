@@ -9,7 +9,7 @@ import { createTokens } from './lib/tokens.js';
 import { createAuth } from './middleware/auth.js';
 import { errorHandler, metricsMiddleware, notFoundHandler } from './middleware/observability.js';
 import { createRateLimiters } from './middleware/rateLimit.js';
-import { adminRoutes } from './routes/admin.js';
+import { adminRoutes, opsCheck } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { browseRoutes } from './routes/browse.js';
 import { downloadRoutes } from './routes/downloads.js';
@@ -68,6 +68,7 @@ export function createApp(external) {
   const api = express.Router();
   api.get('/health', (_req, res) => res.json({ data: { status: 'ok' } }));
   api.use('/auth', authRoutes(deps));
+  api.get('/admin/ops-check', opsCheck(deps));
   api.use(deps.auth.optionalAuth, deps.limits.global);
   api.use('/', browseRoutes(deps));
   api.use('/search', searchRoutes(deps));

@@ -10,7 +10,7 @@ infra/scripts/smoke.sh
 
 Behind a TLS-inspecting corporate proxy, put its root CA files (`*.crt`, PEM) in `infra/certs/`, which is gitignored. Every image adds them to its trust store at build time and at runtime, for apk, apt, npm, pip, requests, httpx and yt-dlp. On macOS: `security find-certificate -a -p -c "<CA name>" /Library/Keychains/System.keychain > infra/certs/corp.crt`.
 
-Only nginx (80/443) is published publicly. The ops tools are served through it under sub-paths (see below). The `migrate` job runs `prisma migrate deploy` before the backend starts. `smoke.sh` checks that HTTP/2 is negotiated, that unsigned and expired stream URLs are rejected, and that a signed Range request returns `206`.
+Only nginx (80/443) is published publicly. The ops tools are served through it under sub-paths, behind OpenWav admin login (see below). The `migrate` job runs `prisma migrate deploy` before the backend starts. `smoke.sh` checks that HTTP/2 is negotiated, that unsigned and expired stream URLs are rejected, and that a signed Range request returns `206`.
 
 ### Upgrading a database from the old node-pg-migrate schema
 
@@ -39,17 +39,17 @@ Admins edit runtime settings from **Admin → Settings**, and they take effect w
 
 ## Ops tools
 
-nginx serves the ops tools on the main domain, so a single tunnel or proxy route to port 443 covers them:
+nginx serves the ops tools on the main domain, so a single tunnel or proxy route to port 443 covers them. Each one requires an OpenWav admin session: opening the admin console sets an `ow_ops` cookie (HttpOnly, SameSite=Strict, 12 hours), and nginx checks it with `auth_request` against `/api/v1/admin/ops-check` on every request. Without a valid admin session, the tools redirect to `/admin`. Demoting or disabling an admin revokes access immediately.
 
-| Tool | URL | Login |
+| Tool | URL | Extra login |
 |---|---|---|
 | Grafana | `$PUBLIC_BASE_URL/grafana/` | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | RabbitMQ console | `$PUBLIC_BASE_URL/rabbitmq/` | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
-| Prometheus | `$PUBLIC_BASE_URL/prometheus/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
-| Alertmanager | `$PUBLIC_BASE_URL/alertmanager/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
-| Prisma Studio | `https://studio.<your domain>/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
+| Prometheus | `$PUBLIC_BASE_URL/prometheus/` | none |
+| Alertmanager | `$PUBLIC_BASE_URL/alertmanager/` | none |
+| Prisma Studio | `$PUBLIC_BASE_URL/studio/` | none |
 
-Prisma Studio loads its assets from absolute paths, so nginx serves it on any hostname starting with `studio.` (`https://studio.localhost` locally); add a tunnel route for that hostname to the same port 443 and set `OPS_PRISMA_STUDIO_URL` to it. Studio can edit every row, so treat its password like the database password. Prometheus, Alertmanager and Studio stay locked until `OPS_PASSWORD` is set. They are also still published on loopback (`127.0.0.1:9090`, `:9093`), and Grafana and RabbitMQ are reachable there under their sub-paths (`127.0.0.1:3001/grafana/`, `127.0.0.1:15672/rabbitmq/`). **Admin → Dashboard → Monitoring tools** links to the public URLs by default. Set `OPS_GRAFANA_URL`, `OPS_PROMETHEUS_URL`, `OPS_ALERTMANAGER_URL` or `OPS_RABBITMQ_URL` to override them. For anything internet-facing, also put the paths behind SSO such as Cloudflare Access.
+Prisma Studio loads `/studio.js`, `/studio.css`, `/bff` and `/telemetry` from the site root, so nginx routes those paths to it as well. Prometheus and Alertmanager are also still published on loopback (`127.0.0.1:9090`, `:9093`), and Grafana and RabbitMQ are reachable there under their sub-paths (`127.0.0.1:3001/grafana/`, `127.0.0.1:15672/rabbitmq/`). **Admin → Dashboard → Monitoring tools** links to the public URLs. Set `OPS_GRAFANA_URL`, `OPS_PROMETHEUS_URL`, `OPS_ALERTMANAGER_URL`, `OPS_RABBITMQ_URL` or `OPS_PRISMA_STUDIO_URL` to override them.
 
 ## Rebuilding after changes
 
