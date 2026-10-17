@@ -10,7 +10,7 @@ infra/scripts/smoke.sh
 
 Behind a TLS-inspecting corporate proxy, put its root CA files (`*.crt`, PEM) in `infra/certs/`, which is gitignored. Every image adds them to its trust store at build time and at runtime, for apk, apt, npm, pip, requests, httpx and yt-dlp. On macOS: `security find-certificate -a -p -c "<CA name>" /Library/Keychains/System.keychain > infra/certs/corp.crt`.
 
-Only nginx (80/443) is published publicly; the ops tools listed below bind to `127.0.0.1`. The `migrate` job runs `prisma migrate deploy` before the backend starts. `smoke.sh` checks that HTTP/2 is negotiated, that unsigned and expired stream URLs are rejected, and that a signed Range request returns `206`.
+Only nginx (80/443) is published publicly. The ops tools are served through it under sub-paths (see below). The `migrate` job runs `prisma migrate deploy` before the backend starts. `smoke.sh` checks that HTTP/2 is negotiated, that unsigned and expired stream URLs are rejected, and that a signed Range request returns `206`.
 
 ### Upgrading a database from the old node-pg-migrate schema
 
@@ -39,7 +39,16 @@ Admins edit runtime settings from **Admin → Settings**, and they take effect w
 
 ## Ops tools
 
-Grafana (`127.0.0.1:3001`), Prometheus (`:9090`), Alertmanager (`:9093`) and the RabbitMQ console (`:15672`) are published on loopback only, so they are reachable from the host or over an SSH tunnel or VPN, never publicly. **Admin → Dashboard → Monitoring tools** links to each one, with a deep link to the OpenWav Grafana dashboard. Behind a real domain, set `OPS_GRAFANA_URL`, `OPS_PROMETHEUS_URL`, `OPS_ALERTMANAGER_URL` and `OPS_RABBITMQ_URL` to wherever you expose them (ideally behind SSO).
+nginx serves the ops tools on the main domain, so a single tunnel or proxy route to port 443 covers them:
+
+| Tool | URL | Login |
+|---|---|---|
+| Grafana | `$PUBLIC_BASE_URL/grafana/` | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
+| RabbitMQ console | `$PUBLIC_BASE_URL/rabbitmq/` | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
+| Prometheus | `$PUBLIC_BASE_URL/prometheus/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
+| Alertmanager | `$PUBLIC_BASE_URL/alertmanager/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
+
+Prometheus and Alertmanager stay locked until `OPS_PASSWORD` is set. They are also still published on loopback (`127.0.0.1:9090`, `:9093`), and Grafana and RabbitMQ are reachable there under their sub-paths (`127.0.0.1:3001/grafana/`, `127.0.0.1:15672/rabbitmq/`). **Admin → Dashboard → Monitoring tools** links to the public URLs by default. Set `OPS_GRAFANA_URL`, `OPS_PROMETHEUS_URL`, `OPS_ALERTMANAGER_URL` or `OPS_RABBITMQ_URL` to override them. For anything internet-facing, also put the paths behind SSO such as Cloudflare Access.
 
 ## Rebuilding after changes
 

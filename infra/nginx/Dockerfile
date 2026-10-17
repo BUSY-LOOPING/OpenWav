@@ -21,8 +21,10 @@ COPY infra/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY infra/nginx/templates /etc/nginx/templates
 COPY infra/nginx/spa /etc/nginx/spa
 COPY infra/nginx/certs.sh /docker-entrypoint.d/05-certs.sh
+COPY infra/nginx/ops-auth.sh /docker-entrypoint.d/06-ops-auth.sh
+COPY infra/nginx/ops.conf /etc/nginx/ops/ops.conf
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
-RUN chmod +x /docker-entrypoint.d/05-certs.sh
+RUN chmod +x /docker-entrypoint.d/05-certs.sh /docker-entrypoint.d/06-ops-auth.sh
 ENV SPA_MODE=static UPSTREAM_API=backend:3000 UPSTREAM_STORAGE=rustfs:9000 S3_BUCKET_AUDIO=audio S3_BUCKET_COVERS=covers AUDIO_CACHE_MAX_SIZE=20g COVER_CACHE_MAX_SIZE=2g
 EXPOSE 80 443
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://127.0.0.1:8081/nginx_status >/dev/null || exit 1
