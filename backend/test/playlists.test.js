@@ -31,7 +31,7 @@ describe('playlists', () => {
       ],
     });
     const mine = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import;
-    expect(mine).toMatchObject({ status: 'downloading', total: 2 });
+    expect(mine).toMatchObject({ status: 'downloading', url: 'https://www.youtube.com/playlist?list=1', total: 2 });
     expect(mine.tasks.map((t) => [t.position, t.title, t.status, t.progress])).toEqual([
       [1, 'First', 'completed', 100],
       [2, 'Second', 'downloading', 40],

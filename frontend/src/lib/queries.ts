@@ -79,8 +79,8 @@ export function usePaged<T>(key: unknown[], url: string, params: Record<string, 
   });
 }
 
-export const useOnlinePlaylist = (id: string) =>
-  useQuery({ queryKey: ['online-playlist', id], queryFn: () => get<OnlinePlaylistDetail>(`/search/playlist/${id}`), staleTime: 5 * 60_000 });
+export const useOnlinePlaylist = (id: string, enabled = true) =>
+  useQuery({ queryKey: ['online-playlist', id], queryFn: () => get<OnlinePlaylistDetail>(`/search/playlist/${id}`), staleTime: 5 * 60_000, enabled: enabled && !!id });
 
 export function usePlayCollection() {
   const dispatch = useAppDispatch();

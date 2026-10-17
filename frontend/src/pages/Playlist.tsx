@@ -8,10 +8,10 @@ import { toast } from '../lib/toast';
 import { Button, Icon, IconButton, Status, Thumb, inputClass } from '../components/ui';
 import { ytFallback } from '../components/youtubeResult';
 import { errorMessage } from '../lib/api';
-import { formatDuration } from '../lib/format';
+import { formatDuration, formatTime } from '../lib/format';
 import { useTaskProgress } from '../lib/progress';
-import { usePlaylist, usePlaylistMutations } from '../lib/queries';
-import type { PlaylistDetail, PlaylistImport, PlaylistTrack } from '../lib/types';
+import { useOnlinePlaylist, usePlaylist, usePlaylistMutations } from '../lib/queries';
+import type { PlaylistDetail, PlaylistImport, PlaylistTrack, YoutubeResult } from '../lib/types';
 import { playTracks } from '../store/player';
 import { useAppDispatch } from '../store';
 
@@ -68,22 +68,28 @@ const videoIdOf = (raw: string) => {
   return url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v');
 };
 
-function PendingRow({ task }: { task: ImportTask }) {
-  const videoId = videoIdOf(task.url);
+function PendingRow({ task, info }: { task: ImportTask; info?: YoutubeResult }) {
+  const videoId = info?.videoId ?? videoIdOf(task.url);
+  const title = info?.title ?? task.title ?? 'Loading…';
   const failed = task.status === 'failed' || task.status === 'cancelled';
   return (
-    <div role="row" aria-busy={!failed} className="flex min-h-14 items-center gap-3 px-2 py-1.5 opacity-50 sm:px-3">
-      <Thumb src={videoId ? ytFallback(videoId) : null} alt="" className="h-10 w-10 shrink-0 grayscale sm:h-12 sm:w-12" />
+    <div role="row" aria-busy={!failed} className="flex min-h-14 items-center gap-3 rounded-md px-2 py-1.5 opacity-50 sm:px-3">
+      <Thumb src={info?.thumbnailUrl ?? null} fallback={videoId ? ytFallback(videoId) : null} alt="" className="h-10 w-10 shrink-0 sm:h-12 sm:w-12" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{task.title ?? 'Loading…'}</p>
-        {failed ? (
-          <p className="text-sm text-red-300">Couldn't download</p>
-        ) : (
-          <div className="mt-2 h-1 w-full max-w-xs overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={`Downloading ${task.title ?? 'track'}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}>
-            <div className="h-full bg-accent transition-[width]" style={{ width: `${task.progress}%` }} />
+        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="truncate text-sm text-muted">
+          {failed ? "Couldn't download" : (info?.artists?.join(', ') ?? info?.channel ?? (task.status === 'queued' ? 'Waiting to download' : 'Downloading'))}
+          {info?.album && <span className="lg:hidden"> • {info.album}</span>}
+        </p>
+        {!failed && (
+          <div className="mt-1 h-1 w-full overflow-hidden rounded bg-white/10" role="progressbar" aria-label={`Downloading ${title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}>
+            <div className="h-full bg-accent transition-all" style={{ width: `${task.progress}%` }} />
           </div>
         )}
       </div>
+      <span className="hidden w-1/4 truncate text-sm text-muted lg:block">{info?.album ?? ''}</span>
+      <span className="hidden w-12 text-right text-sm text-muted tabular-nums sm:block">{info?.durationSec ? formatTime(info.durationSec) : ''}</span>
+      <span className="w-10 shrink-0" />
     </div>
   );
 }
@@ -123,6 +129,8 @@ export default function Playlist() {
 
   useEffect(() => setOrder(playlist?.tracks ?? []), [playlist?.tracks]);
   const importTasks = useImportTasks(playlist?.import ?? null);
+  const listId = playlist?.import ? new URL(playlist.import.url).searchParams.get('list') : null;
+  const preview = useOnlinePlaylist(listId ?? '', !!listId);
 
   if (isLoading)
     return (
@@ -141,6 +149,7 @@ export default function Playlist() {
     ? [...order.map((t, i) => ({ t, i, at: t.position })), ...pending.map((task) => ({ task, at: task.position ?? 0 }))].sort((a, b) => a.at - b.at)
     : order.map((t, i) => ({ t, i }));
   const canDrag = owner && !pending.length;
+  const previewByVideo = new Map((preview.data?.tracks ?? []).map((t) => [t.videoId, t]));
   const play = (shuffle: boolean) => order.length && dispatch(playTracks({ tracks: order, shuffle }));
 
   function drop(to: number) {
@@ -213,7 +222,7 @@ export default function Playlist() {
           <div role="table" aria-label="Tracks">
             {rows.map((row) =>
               'task' in row ? (
-                <PendingRow key={row.task.id} task={row.task} />
+                <PendingRow key={row.task.id} task={row.task} info={previewByVideo.get(videoIdOf(row.task.url) ?? '')} />
               ) : (
               <TrackRow
                 key={row.t.id}

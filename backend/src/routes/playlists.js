@@ -31,7 +31,7 @@ export function playlistRoutes({ prisma, auth, serialize, playlists, downloads, 
     return {
       ...serialize.playlist(p, userId),
       tracks: p.tracks.filter((t) => t.media.status === 'completed').map((t) => ({ ...serialize.track(t.media), position: t.position, addedAt: t.addedAt })),
-      import: job ? { status: job.status, total: job.totalTracks, tasks: job.tasks } : null,
+      import: job ? { status: job.status, url: job.url, total: job.totalTracks, tasks: job.tasks } : null,
     };
   }
 
