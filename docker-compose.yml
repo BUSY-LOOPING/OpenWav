@@ -33,9 +33,16 @@ x-node-env: &node-env
   OPS_PRISMA_STUDIO_URL: ${OPS_PRISMA_STUDIO_URL:-${PUBLIC_BASE_URL}/studio/}
   PRISMA_STUDIO_URL: http://prisma-studio:5556
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
 x-restart: &restart
   restart: unless-stopped
   networks: [internal]
+  logging: *logging
 
 services:
   nginx:
@@ -102,6 +109,7 @@ services:
 
   # Studio only listens on 127.0.0.1, so expose it to nginx from inside its network namespace
   prisma-studio-proxy:
+    logging: *logging
     restart: unless-stopped
     image: alpine/socat:1.8.0.0
     network_mode: service:prisma-studio
@@ -227,6 +235,7 @@ services:
       retries: 10
 
   db-tunnel:
+    logging: *logging
     profiles: [tools]
     networks: [internal]
     image: alpine/socat:1.8.0.0
