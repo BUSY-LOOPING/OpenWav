@@ -47,8 +47,9 @@ nginx serves the ops tools on the main domain, so a single tunnel or proxy route
 | RabbitMQ console | `$PUBLIC_BASE_URL/rabbitmq/` | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
 | Prometheus | `$PUBLIC_BASE_URL/prometheus/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
 | Alertmanager | `$PUBLIC_BASE_URL/alertmanager/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
+| Prisma Studio | `https://studio.<your domain>/` | `OPS_USER` / `OPS_PASSWORD` (nginx basic auth) |
 
-Prometheus and Alertmanager stay locked until `OPS_PASSWORD` is set. They are also still published on loopback (`127.0.0.1:9090`, `:9093`), and Grafana and RabbitMQ are reachable there under their sub-paths (`127.0.0.1:3001/grafana/`, `127.0.0.1:15672/rabbitmq/`). **Admin → Dashboard → Monitoring tools** links to the public URLs by default. Set `OPS_GRAFANA_URL`, `OPS_PROMETHEUS_URL`, `OPS_ALERTMANAGER_URL` or `OPS_RABBITMQ_URL` to override them. For anything internet-facing, also put the paths behind SSO such as Cloudflare Access.
+Prisma Studio loads its assets from absolute paths, so nginx serves it on any hostname starting with `studio.` (`https://studio.localhost` locally); add a tunnel route for that hostname to the same port 443 and set `OPS_PRISMA_STUDIO_URL` to it. Studio can edit every row, so treat its password like the database password. Prometheus, Alertmanager and Studio stay locked until `OPS_PASSWORD` is set. They are also still published on loopback (`127.0.0.1:9090`, `:9093`), and Grafana and RabbitMQ are reachable there under their sub-paths (`127.0.0.1:3001/grafana/`, `127.0.0.1:15672/rabbitmq/`). **Admin → Dashboard → Monitoring tools** links to the public URLs by default. Set `OPS_GRAFANA_URL`, `OPS_PROMETHEUS_URL`, `OPS_ALERTMANAGER_URL` or `OPS_RABBITMQ_URL` to override them. For anything internet-facing, also put the paths behind SSO such as Cloudflare Access.
 
 ## Rebuilding after changes
 

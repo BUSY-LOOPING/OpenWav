@@ -97,7 +97,7 @@ export function adminRoutes(deps) {
         { name: 'Prometheus', description: 'Metrics and alert rules', url: config.OPS_PROMETHEUS_URL, check: `${config.PROMETHEUS_URL}/-/healthy` },
         { name: 'Alertmanager', description: 'Active alerts and silences', url: config.OPS_ALERTMANAGER_URL, check: `${config.ALERTMANAGER_URL}/-/healthy` },
         { name: 'RabbitMQ', description: 'Download queues and dead letters', url: config.OPS_RABBITMQ_URL, check: config.RABBITMQ_UI_URL },
-        { name: 'Prisma Studio', description: 'Runs on your machine only while npm run db:studio is running', url: config.OPS_PRISMA_STUDIO_URL, check: null },
+        { name: 'Prisma Studio', description: 'Browse and edit database rows', url: config.OPS_PRISMA_STUDIO_URL, check: config.PRISMA_STUDIO_URL ?? null },
       ].map(async ({ check, ...link }) => ({ ...link, status: check ? await reachable(check) : 'manual' })),
     );
     res.json({ data: { services, http: await monitoring.latency(), links } });

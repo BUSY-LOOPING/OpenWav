@@ -30,6 +30,8 @@ x-node-env: &node-env
   OPS_PROMETHEUS_URL: ${OPS_PROMETHEUS_URL:-${PUBLIC_BASE_URL}/prometheus}
   OPS_ALERTMANAGER_URL: ${OPS_ALERTMANAGER_URL:-${PUBLIC_BASE_URL}/alertmanager}
   OPS_RABBITMQ_URL: ${OPS_RABBITMQ_URL:-${PUBLIC_BASE_URL}/rabbitmq}
+  OPS_PRISMA_STUDIO_URL: ${OPS_PRISMA_STUDIO_URL:-http://127.0.0.1:5555}
+  PRISMA_STUDIO_URL: http://prisma-studio:5555
 
 x-restart: &restart
   restart: unless-stopped
@@ -83,6 +85,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  prisma-studio:
+    <<: *restart
+    build:
+      context: .
+      additional_contexts:
+        certs: ./infra/certs
+      dockerfile: backend/Dockerfile
+    working_dir: /app
+    command: ["npm", "run", "db:studio"]
+    environment:
+      <<: *node-env
+      BROWSER: none
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   backend:
     <<: *restart

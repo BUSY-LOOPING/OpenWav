@@ -32,6 +32,7 @@ const schema = z.object({
   OPS_ALERTMANAGER_URL: z.string().default('http://127.0.0.1:9093'),
   OPS_RABBITMQ_URL: z.string().default('http://127.0.0.1:15672'),
   OPS_PRISMA_STUDIO_URL: z.string().default('http://127.0.0.1:5555'),
+  PRISMA_STUDIO_URL: z.string().optional(),
   CORS_ORIGINS: z.string().default('https://localhost:8443,http://localhost:6330'),
   TRUST_PROXY: z.coerce.number().int().default(1),
 });
