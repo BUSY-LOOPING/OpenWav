@@ -31,7 +31,7 @@ x-node-env: &node-env
   OPS_ALERTMANAGER_URL: ${OPS_ALERTMANAGER_URL:-${PUBLIC_BASE_URL}/alertmanager}
   OPS_RABBITMQ_URL: ${OPS_RABBITMQ_URL:-${PUBLIC_BASE_URL}/rabbitmq}
   OPS_PRISMA_STUDIO_URL: ${OPS_PRISMA_STUDIO_URL:-${PUBLIC_BASE_URL}/studio/}
-  PRISMA_STUDIO_URL: http://prisma-studio:5555
+  PRISMA_STUDIO_URL: http://prisma-studio:5556
 
 x-restart: &restart
   restart: unless-stopped
@@ -99,6 +99,14 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+
+  # Studio only listens on 127.0.0.1, so expose it to nginx from inside its network namespace
+  prisma-studio-proxy:
+    restart: unless-stopped
+    image: alpine/socat
+    network_mode: service:prisma-studio
+    command: ["tcp-listen:5556,fork,reuseaddr", "tcp-connect:127.0.0.1:5555"]
+    depends_on: [prisma-studio]
 
   backend:
     <<: *restart
