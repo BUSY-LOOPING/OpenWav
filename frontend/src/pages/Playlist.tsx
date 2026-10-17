@@ -6,7 +6,6 @@ import { Menu } from '../components/Menu';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
 import { toast } from '../lib/toast';
 import { Button, Icon, IconButton, Status, Thumb, inputClass } from '../components/ui';
-import { ytFallback } from '../components/youtubeResult';
 import { errorMessage } from '../lib/api';
 import { formatDuration, formatTime } from '../lib/format';
 import { useTaskProgress } from '../lib/progress';
@@ -68,28 +67,32 @@ const videoIdOf = (raw: string) => {
   return url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v');
 };
 
-function PendingRow({ task, info }: { task: ImportTask; info?: YoutubeResult }) {
+// Mirrors TrackRow's slots (drag handle, like, menu) so pending and downloaded rows line up exactly
+function PendingRow({ task, info, draggable }: { task: ImportTask; info?: YoutubeResult; draggable: boolean }) {
   const videoId = info?.videoId ?? videoIdOf(task.url);
   const title = info?.title ?? task.title ?? 'Loading…';
   const failed = task.status === 'failed' || task.status === 'cancelled';
+  const subtitle = failed ? "Couldn't download" : (info?.artists?.join(', ') ?? info?.channel ?? (task.status === 'queued' ? 'Waiting to download' : 'Downloading'));
   return (
-    <div role="row" aria-busy={!failed} className="flex min-h-14 items-center gap-3 rounded-md px-2 py-1.5 opacity-50 sm:px-3">
-      <Thumb src={info?.thumbnailUrl ?? null} fallback={videoId ? ytFallback(videoId) : null} alt="" className="h-10 w-10 shrink-0 sm:h-12 sm:w-12" />
+    <div role="row" aria-busy={!failed} className="relative flex min-h-14 items-center gap-3 rounded-md px-2 py-1.5 opacity-50 sm:px-3">
+      {draggable && <Icon name="drag_indicator" className="hidden text-white/40 sm:inline-block" />}
+      <Thumb src={info?.thumbnailUrl ?? null} fallback={videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : null} alt="" className="h-10 w-10 shrink-0 sm:h-12 sm:w-12" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{title}</p>
-        <p className="truncate text-sm text-muted">
-          {failed ? "Couldn't download" : (info?.artists?.join(', ') ?? info?.channel ?? (task.status === 'queued' ? 'Waiting to download' : 'Downloading'))}
+        <p className={`truncate text-sm ${failed ? 'text-red-300' : 'text-muted'}`}>
+          {subtitle}
           {info?.album && <span className="lg:hidden"> • {info.album}</span>}
         </p>
-        {!failed && (
-          <div className="mt-1 h-1 w-full overflow-hidden rounded bg-white/10" role="progressbar" aria-label={`Downloading ${title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}>
-            <div className="h-full bg-accent transition-all" style={{ width: `${task.progress}%` }} />
-          </div>
-        )}
       </div>
       <span className="hidden w-1/4 truncate text-sm text-muted lg:block">{info?.album ?? ''}</span>
+      <span className="hidden w-10 shrink-0 sm:block" />
       <span className="hidden w-12 text-right text-sm text-muted tabular-nums sm:block">{info?.durationSec ? formatTime(info.durationSec) : ''}</span>
       <span className="w-10 shrink-0" />
+      {!failed && (
+        <div className="absolute inset-x-2 bottom-0 h-0.5 overflow-hidden rounded bg-white/10 sm:inset-x-3" role="progressbar" aria-label={`Downloading ${title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}>
+          <div className="h-full bg-accent transition-all" style={{ width: `${task.progress}%` }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -148,7 +151,6 @@ export default function Playlist() {
   const rows = pending.length
     ? [...order.map((t, i) => ({ t, i, at: t.position })), ...pending.map((task) => ({ task, at: task.position ?? 0 }))].sort((a, b) => a.at - b.at)
     : order.map((t, i) => ({ t, i }));
-  const canDrag = owner && !pending.length;
   const previewByVideo = new Map((preview.data?.tracks ?? []).map((t) => [t.videoId, t]));
   const play = (shuffle: boolean) => order.length && dispatch(playTracks({ tracks: order, shuffle }));
 
@@ -222,7 +224,7 @@ export default function Playlist() {
           <div role="table" aria-label="Tracks">
             {rows.map((row) =>
               'task' in row ? (
-                <PendingRow key={row.task.id} task={row.task} info={previewByVideo.get(videoIdOf(row.task.url) ?? '')} />
+                <PendingRow key={row.task.id} task={row.task} info={previewByVideo.get(videoIdOf(row.task.url) ?? '')} draggable={owner} />
               ) : (
               <TrackRow
                 key={row.t.id}
@@ -231,7 +233,7 @@ export default function Playlist() {
                 index={row.i}
                 onRemove={owner ? () => mutations.removeTrack.mutate(row.t.id) : undefined}
                 drag={
-                  canDrag
+                  owner
                     ? {
                         onDragStart: () => (dragFrom.current = row.i),
                         onDragOver: (e) => e.preventDefault(),
