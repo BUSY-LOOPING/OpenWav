@@ -8,8 +8,9 @@ import { toast } from '../lib/toast';
 import { Button, Icon, IconButton, Status, inputClass } from '../components/ui';
 import { errorMessage } from '../lib/api';
 import { formatDuration } from '../lib/format';
+import { useTaskProgress } from '../lib/progress';
 import { usePlaylist, usePlaylistMutations } from '../lib/queries';
-import type { PlaylistDetail, PlaylistTrack } from '../lib/types';
+import type { PlaylistDetail, PlaylistImport, PlaylistTrack, TaskStatus } from '../lib/types';
 import { playTracks } from '../store/player';
 import { useAppDispatch } from '../store';
 
@@ -56,6 +57,62 @@ function EditDialog({ playlist, onClose }: { playlist: PlaylistDetail; onClose: 
         </label>
       </div>
     </Dialog>
+  );
+}
+
+function TaskState({ status, progress }: { status: TaskStatus; progress: number }) {
+  if (status === 'completed')
+    return (
+      <span className="text-emerald-400">
+        <Icon name="check_circle" />
+        <span className="sr-only">Downloaded</span>
+      </span>
+    );
+  if (status === 'failed' || status === 'cancelled') return <span className="text-xs text-red-300">{status === 'failed' ? 'Failed' : 'Cancelled'}</span>;
+  if (status === 'queued') return <span className="text-xs text-muted">Waiting</span>;
+  return (
+    <span className="flex w-24 items-center gap-2 text-xs text-muted">
+      <span className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+        <span className="block h-full bg-accent transition-[width]" style={{ width: `${progress}%` }} />
+      </span>
+      {progress}%
+    </span>
+  );
+}
+
+function ImportProgress({ job }: { job: PlaylistImport }) {
+  const live = useTaskProgress(job.tasks.map((t) => t.id));
+  const tasks = job.tasks.map((t) => {
+    const e = live[t.id];
+    return e ? { ...t, status: e.status, progress: e.progress ?? t.progress, title: t.title ?? e.title } : t;
+  });
+  const total = job.total || tasks.length;
+  const done = tasks.filter((t) => t.status === 'completed').length;
+  return (
+    <section aria-label="Import progress" className="mb-6 rounded-xl bg-white/5 p-4">
+      <div className="flex items-center justify-between gap-4 text-sm">
+        <p className="font-medium">{job.status === 'downloading' ? 'Importing playlist' : 'Fetching playlist…'}</p>
+        {total > 0 && (
+          <p className="text-muted">
+            {done} of {total} downloaded
+          </p>
+        )}
+      </div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Import progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+        <div className="h-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
+      </div>
+      {tasks.length > 0 && (
+        <ol className="thin-scrollbar mt-3 max-h-96 overflow-y-auto">
+          {tasks.map((t) => (
+            <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
+              <span className="w-6 shrink-0 text-right text-muted">{t.position}</span>
+              <span className="min-w-0 flex-1 truncate">{t.title ?? t.url}</span>
+              <TaskState status={t.status} progress={t.progress} />
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }
 
@@ -150,7 +207,8 @@ export default function Playlist() {
         />
       </div>
       <div className="min-w-0 flex-1 pb-6 xl:pt-6">
-        {!order.length && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
+        {playlist.import && <ImportProgress job={playlist.import} />}
+        {!order.length && !playlist.import && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
         <div role="table" aria-label="Tracks">
           {order.map((t, i) => (
             <TrackRow

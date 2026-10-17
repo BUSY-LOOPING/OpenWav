@@ -62,8 +62,15 @@ export interface Playlist {
   createdAt: string;
 }
 
+export interface PlaylistImport {
+  status: 'queued' | 'resolving' | 'downloading';
+  total: number;
+  tasks: { id: string; title: string | null; url: string; status: TaskStatus; progress: number; position: number | null }[];
+}
+
 export interface PlaylistDetail extends Playlist {
   tracks: PlaylistTrack[];
+  import: PlaylistImport | null;
 }
 
 export interface Artist {

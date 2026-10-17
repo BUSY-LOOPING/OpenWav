@@ -61,7 +61,8 @@ export const useLyrics = (id: string | undefined) =>
   useQuery({ queryKey: keys.lyrics(id ?? ''), queryFn: () => get<Lyrics>(`/media/${id}/lyrics`), enabled: !!id, retry: false });
 export const useArtist = (id: string) => useQuery({ queryKey: keys.artist(id), queryFn: () => get<ArtistDetail>(`/artists/${id}`) });
 export const useAlbum = (id: string) => useQuery({ queryKey: keys.album(id), queryFn: () => get<AlbumDetail>(`/albums/${id}`) });
-export const usePlaylist = (id: string) => useQuery({ queryKey: keys.playlist(id), queryFn: () => get<PlaylistDetail>(`/playlists/${id}`) });
+export const usePlaylist = (id: string) =>
+  useQuery({ queryKey: keys.playlist(id), queryFn: () => get<PlaylistDetail>(`/playlists/${id}`), refetchInterval: (q) => (q.state.data?.import ? 4000 : false) });
 export const useMyPlaylists = (enabled = true) =>
   useQuery({ queryKey: keys.myPlaylists, queryFn: () => get<Playlist[]>('/library/playlists'), enabled });
 export const useLibraryArtists = () => useQuery({ queryKey: keys.library('artists'), queryFn: () => get<Artist[]>('/library/artists') });
