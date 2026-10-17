@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  node:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,14 +21,54 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+
+  build:
+    name: Build · frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm run build -w frontend
 
-  python:
+  node:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        service: [scraper, recommender]
+        # Mixed workspaces list their unit files explicitly; the integration job runs everything else so new files are never skipped
+        include:
+          - { name: Unit · shared, workspace: packages/shared }
+          - { name: Unit · frontend, workspace: frontend }
+          - { name: Unit · downloader, workspace: services/downloader, args: test/ytdlp.test.js }
+          - { name: Integration · db migrations, workspace: packages/db }
+          - { name: Integration · backend API, workspace: backend }
+          - { name: Integration · downloader, workspace: services/downloader, args: --exclude test/ytdlp.test.js }
+          - { name: Integration · scheduler, workspace: services/scheduler }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -w ${{ matrix.workspace }} -- --reporter=verbose ${{ matrix.args }}
+
+  python:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Unit · scraper, service: scraper, args: tests/test_normalize.py }
+          - { name: Integration · scraper API, service: scraper, args: --ignore=tests/test_normalize.py }
+          - { name: Unit · recommender model, service: recommender, args: tests/test_model.py }
+          - { name: Integration · recommender API, service: recommender, args: --ignore=tests/test_model.py }
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -39,4 +80,5 @@ jobs:
           cache: pip
           cache-dependency-path: services/${{ matrix.service }}/requirements*.txt
       - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: pytest
+      - run: pytest -o addopts= -v ${{ matrix.args }}
+# Edited by Claude Code
