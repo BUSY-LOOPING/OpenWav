@@ -6,7 +6,8 @@ import { errorMessage } from '../../lib/api';
 import { artistNames, formatTime } from '../../lib/format';
 import { useAdminAction, useAdminMedia } from '../../lib/queries';
 import type { Track } from '../../lib/types';
-import { DataList, usePager } from './DataList';
+import { DataList } from './DataList';
+import { usePager } from './usePager';
 
 function EditDialog({ track, onClose }: { track: Track; onClose: () => void }) {
   const action = useAdminAction('media');

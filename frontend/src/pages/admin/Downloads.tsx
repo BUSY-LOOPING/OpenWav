@@ -5,7 +5,8 @@ import { errorMessage } from '../../lib/api';
 import { useProgress } from '../../lib/progress';
 import { useAdminAction, useAdminDownloads, useCreateDownload } from '../../lib/queries';
 import type { ProgressEvent, Task } from '../../lib/types';
-import { DataList, usePager } from './DataList';
+import { DataList } from './DataList';
+import { usePager } from './usePager';
 
 const TABS = ['queue', 'completed', 'failed', 'cancelled', 'all'] as const;
 type Tab = (typeof TABS)[number];

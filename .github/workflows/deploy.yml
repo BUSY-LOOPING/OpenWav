@@ -1,0 +1,38 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    # Only pushes to main in this repo; fork PRs from a branch named main must never reach the server
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: [self-hosted, openwav-prod]
+    defaults:
+      run:
+        working-directory: ${{ vars.DEPLOY_DIR }}
+    steps:
+      - name: Update checkout
+        run: |
+          git fetch origin main
+          git reset --hard ${{ github.event.workflow_run.head_sha || 'origin/main' }}
+      - name: Build and restart
+        run: |
+          docker compose up -d --build --remove-orphans
+          docker compose restart nginx
+      - name: Smoke test
+        run: |
+          PUBLIC_BASE_URL=$(grep '^PUBLIC_BASE_URL=' .env | cut -d= -f2-) \
+          STREAM_SIGNING_SECRET=$(grep '^STREAM_SIGNING_SECRET=' .env | cut -d= -f2-) \
+          infra/scripts/smoke.sh
+# Edited by Claude Code

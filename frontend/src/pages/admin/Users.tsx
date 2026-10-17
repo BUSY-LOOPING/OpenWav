@@ -6,7 +6,8 @@ import { errorMessage } from '../../lib/api';
 import { useAdminAction, useAdminUsers } from '../../lib/queries';
 import type { AdminUser } from '../../lib/types';
 import { useAppSelector } from '../../store';
-import { DataList, usePager } from './DataList';
+import { DataList } from './DataList';
+import { usePager } from './usePager';
 
 const FILTERS = ['all', 'active', 'banned', 'admin'] as const;
 
