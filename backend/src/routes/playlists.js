@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { isPlaylistUrl } from '@openwav/shared';
+import { PLAYLIST_TASK_STATUS, isPlaylistUrl } from '@openwav/shared';
 import { badRequest, notFound } from '../lib/errors.js';
 import { uuidParam, validate } from '../lib/http.js';
 import { playlistInclude, trackInclude } from '../lib/serializers.js';
@@ -21,9 +21,17 @@ export function playlistRoutes({ prisma, auth, serialize, playlists, downloads, 
       include: { ...playlistInclude(userId), tracks: { orderBy: { position: 'asc' }, include: { media: { include: trackInclude(userId) } } } },
     });
     if (!p || (!p.isPublic && p.createdBy !== userId)) throw notFound('Playlist');
+    const job =
+      p.createdBy === userId &&
+      (await prisma.playlistTask.findFirst({
+        where: { targetPlaylistId: id, status: { in: [PLAYLIST_TASK_STATUS.queued, PLAYLIST_TASK_STATUS.resolving, PLAYLIST_TASK_STATUS.downloading] } },
+        orderBy: { createdAt: 'desc' },
+        include: { tasks: { orderBy: { position: 'asc' }, select: { id: true, title: true, url: true, status: true, progress: true, position: true } } },
+      }));
     return {
       ...serialize.playlist(p, userId),
       tracks: p.tracks.filter((t) => t.media.status === 'completed').map((t) => ({ ...serialize.track(t.media), position: t.position, addedAt: t.addedAt })),
+      import: job ? { status: job.status, total: job.totalTracks, tasks: job.tasks } : null,
     };
   }
 

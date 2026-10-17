@@ -118,6 +118,20 @@ describe('download job', () => {
   });
 });
 
+describe('download job dedupe', () => {
+  it('reuses an existing track without running yt-dlp', async () => {
+    const { jobs, storage } = await setup({ probe: async () => { throw new Error('should not probe'); } });
+    const u = await user();
+    const have = await prisma.media.create({ data: { title: 'Song', url: 'https://www.youtube.com/watch?v=vid1', sourceId: 'vid1', format: 'mp3', status: 'completed', duration: 180 } });
+    const playlist = await prisma.playlist.create({ data: { name: 'Mine', createdBy: u.id } });
+    const task = await prisma.downloadTask.create({ data: { url: 'https://youtu.be/vid1', requestedBy: u.id } });
+    expect(await jobs.download(job(task, { playlistId: playlist.id }))).toBe(have.id);
+    expect(storage.uploads).toEqual([]);
+    expect(await prisma.downloadTask.findUnique({ where: { id: task.id } })).toMatchObject({ status: 'completed', mediaId: have.id, progress: 100 });
+    expect(await prisma.playlist.findUnique({ where: { id: playlist.id } })).toMatchObject({ totalTracks: 1, totalDuration: 180 });
+  });
+});
+
 describe('playlist job', () => {
   it('fans out child tasks with positions and renames an imported playlist', async () => {
     const { jobs, published } = await setup();
@@ -132,6 +146,35 @@ describe('playlist job', () => {
     ]);
     expect((await prisma.playlist.findUnique({ where: { id: playlist.id } })).name).toBe('YT List');
     expect(await prisma.playlistTask.findUnique({ where: { id: parent.id } })).toMatchObject({ status: 'downloading', totalTracks: 2 });
+  });
+
+  it('links tracks already in the library instead of downloading them again', async () => {
+    const { jobs, published } = await setup({
+      playlist: async () => ({ title: 'YT List', entries: [{ url: 'https://www.youtube.com/watch?v=a', title: 'Have it' }, { url: 'https://youtu.be/b', title: 'New one' }] }),
+    });
+    const u = await user();
+    const have = await prisma.media.create({ data: { title: 'Have it', url: 'https://music.youtube.com/watch?v=a', sourceId: 'a', format: 'mp3', status: 'completed', duration: 100 } });
+    const playlist = await prisma.playlist.create({ data: { name: 'Imported playlist', createdBy: u.id } });
+    const parent = await prisma.playlistTask.create({ data: { url: 'https://www.youtube.com/playlist?list=1', requestedBy: u.id } });
+    await jobs.playlist({ playlistTaskId: parent.id, url: parent.url, format: 'mp3', quality: '192k', userId: u.id, playlistId: playlist.id });
+    expect(published.map((p) => [p.url, p.position])).toEqual([['https://youtu.be/b', 2]]);
+    const children = await prisma.downloadTask.findMany({ where: { playlistTaskId: parent.id }, orderBy: { position: 'asc' } });
+    expect(children.map((c) => [c.title, c.status, c.mediaId])).toEqual([
+      ['Have it', 'completed', have.id],
+      ['New one', 'queued', null],
+    ]);
+    expect(await prisma.playlistTrack.findMany({ where: { playlistId: playlist.id }, select: { mediaId: true, position: true } })).toEqual([{ mediaId: have.id, position: 1 }]);
+    expect((await prisma.playlistTask.findUnique({ where: { id: parent.id } })).status).toBe('downloading');
+  });
+
+  it('completes straight away when every track is already in the library', async () => {
+    const { jobs, published } = await setup();
+    const u = await user();
+    await prisma.media.createMany({ data: ['a', 'b'].map((id) => ({ title: id, url: `https://www.youtube.com/watch?v=${id}`, sourceId: id, format: 'mp3', status: 'completed' })) });
+    const parent = await prisma.playlistTask.create({ data: { url: 'https://www.youtube.com/playlist?list=1', requestedBy: u.id } });
+    await jobs.playlist({ playlistTaskId: parent.id, url: parent.url, format: 'mp3', quality: '192k', userId: u.id, playlistId: null });
+    expect(published).toEqual([]);
+    expect((await prisma.playlistTask.findUnique({ where: { id: parent.id } })).status).toBe('completed');
   });
 
   it('fails empty playlists', async () => {
