@@ -103,7 +103,7 @@ services:
   # Studio only listens on 127.0.0.1, so expose it to nginx from inside its network namespace
   prisma-studio-proxy:
     restart: unless-stopped
-    image: alpine/socat
+    image: alpine/socat:1.8.0.0
     network_mode: service:prisma-studio
     command: ["tcp-listen:5556,fork,reuseaddr", "tcp-connect:127.0.0.1:5555"]
     depends_on: [prisma-studio]
