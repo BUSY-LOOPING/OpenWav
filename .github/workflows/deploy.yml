@@ -35,4 +35,3 @@ jobs:
           PUBLIC_BASE_URL=$(grep '^PUBLIC_BASE_URL=' .env | cut -d= -f2-) \
           STREAM_SIGNING_SECRET=$(grep '^STREAM_SIGNING_SECRET=' .env | cut -d= -f2-) \
           infra/scripts/smoke.sh
-# Edited by Claude Code
