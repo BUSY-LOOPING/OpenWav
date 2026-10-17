@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CollectionHeader } from '../components/CollectionHeader';
-import { YoutubeRow, useImport } from '../components/YoutubeRow';
+import { YoutubeRow } from '../components/YoutubeRow';
+import { useImport } from '../components/youtubeResult';
 import { TrackRowSkeleton } from '../components/TrackRow';
 import { Button, Icon, IconButton, Skeleton, Status } from '../components/ui';
 import { errorMessage } from '../lib/api';
