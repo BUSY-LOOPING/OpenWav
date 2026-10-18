@@ -1,4 +1,4 @@
-import { EXCHANGE, QUEUES, TASK_STATUS, isAllowedDomain, isPlaylistUrl, publishJson } from '@openwav/shared';
+import { DAILY_LIMIT_MESSAGE, EXCHANGE, QUEUES, TASK_STATUS, dailyQuotaWhere, isAllowedDomain, isPlaylistUrl, publishJson } from '@openwav/shared';
 import { AppError, badRequest, unavailable } from '../lib/errors.js';
 
 const YT_HOSTS = /(^|\.)(youtube\.com|youtu\.be|music\.youtube\.com)$/;
@@ -12,7 +12,7 @@ export function canonicalUrl(raw) {
 }
 
 export function createDownloadService({ prisma, settings, channel, playlists }) {
-  async function guard(rawUrl, userId) {
+  async function guard(rawUrl) {
     const s = await settings.all();
     let parsed;
     try {
@@ -23,12 +23,13 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
     if (!['http:', 'https:'].includes(parsed.protocol) || !isAllowedDomain(rawUrl, s['downloads.allowed_domains'])) {
       throw badRequest(`Downloads from ${parsed.hostname} are not allowed`);
     }
-    if (userId) {
-      const since = new Date(Date.now() - 86_400_000);
-      const count = await prisma.downloadTask.count({ where: { requestedBy: userId, createdAt: { gte: since } } });
-      if (count >= s['downloads.max_per_user_per_day']) throw new AppError(429, 'RATE_LIMITED', 'Daily download limit reached');
-    }
     return s;
+  }
+
+  async function checkQuota(userId, s) {
+    if (!userId) return;
+    const used = await prisma.downloadTask.count({ where: dailyQuotaWhere(userId) });
+    if (used >= s['downloads.max_per_user_per_day']) throw new AppError(429, 'RATE_LIMITED', DAILY_LIMIT_MESSAGE);
   }
 
   async function publish(routingKey, payload, onFail) {
@@ -41,7 +42,7 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
   }
 
   async function create({ url: rawUrl, format, quality, userId, playlistId = null, name, isPublic }) {
-    const s = await guard(rawUrl, userId);
+    const s = await guard(rawUrl);
     format ??= s['downloads.default_format'];
     quality ??= s['downloads.default_quality'];
 
@@ -63,6 +64,7 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
       if (playlistId) await playlists.addTrack(playlistId, existing.id, userId);
       return { type: 'track', mediaId: existing.id };
     }
+    await checkQuota(userId, s);
 
     const task = await prisma.downloadTask.create({ data: { url, requestedBy: userId, format, quality, targetPlaylistId: playlistId } });
     await publish(QUEUES.download, { taskId: task.id, url, format, quality, userId, playlistTaskId: null, playlistId, position: null }, (err) =>

@@ -21,6 +21,31 @@ describe('playlists', () => {
     expect((await ctx.request.get(`/api/v1/playlists/${res.body.data.id}`)).status).toBe(404);
   });
 
+  it('shows the running import with every entry to the owner only', async () => {
+    const { id } = (await create()).body.data;
+    const job = await prisma.playlistTask.create({ data: { url: 'https://www.youtube.com/playlist?list=1', requestedBy: owner.id, targetPlaylistId: id, status: 'downloading', totalTracks: 2 } });
+    await prisma.downloadTask.createMany({
+      data: [
+        { url: 'https://youtu.be/b', title: 'Second', playlistTaskId: job.id, position: 2, status: 'downloading', progress: 40 },
+        { url: 'https://youtu.be/a', title: 'First', playlistTaskId: job.id, position: 1, status: 'completed', progress: 100 },
+      ],
+    });
+    const mine = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import;
+    expect(mine).toMatchObject({ status: 'downloading', running: true, url: 'https://www.youtube.com/playlist?list=1', total: 2 });
+    expect(mine.tasks.map((t) => [t.position, t.title, t.status, t.progress])).toEqual([
+      [1, 'First', 'completed', 100],
+      [2, 'Second', 'downloading', 40],
+    ]);
+    expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, other))).body.data.import).toBeNull();
+    await prisma.playlistTask.update({ where: { id: job.id }, data: { status: 'completed' } });
+    await prisma.downloadTask.updateMany({ where: { title: 'Second' }, data: { status: 'failed', errorMessage: 'Daily download limit reached' } });
+    const finished = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import;
+    expect(finished).toMatchObject({ running: false });
+    expect(finished.tasks.find((t) => t.title === 'Second')).toMatchObject({ status: 'failed', reason: 'daily_limit' });
+    await prisma.downloadTask.updateMany({ where: { title: 'Second' }, data: { status: 'completed' } });
+    expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import).toBeNull();
+  });
+
   it('serves public playlists without login', async () => {
     const { id } = (await create()).body.data;
     const res = await ctx.request.get(`/api/v1/playlists/${id}`);
