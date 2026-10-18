@@ -34,6 +34,14 @@ export const PLAYLIST_TASK_STATUS = Object.freeze({
 
 export const TERMINAL_TASK_STATUSES = [TASK_STATUS.completed, TASK_STATUS.failed, TASK_STATUS.cancelled];
 
+export const DAILY_LIMIT_MESSAGE = 'Daily download limit reached';
+
+export const dailyQuotaWhere = (userId, now = Date.now()) => ({
+  requestedBy: userId,
+  createdAt: { gte: new Date(now - 86_400_000) },
+  NOT: { status: TASK_STATUS.completed, startedAt: null },
+});
+
 export const AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'flac', 'wav'];
 export const AUDIO_QUALITIES = ['64k', '96k', '128k', '160k', '192k', '256k', '320k'];
 

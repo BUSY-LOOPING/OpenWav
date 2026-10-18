@@ -31,13 +31,18 @@ describe('playlists', () => {
       ],
     });
     const mine = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import;
-    expect(mine).toMatchObject({ status: 'downloading', url: 'https://www.youtube.com/playlist?list=1', total: 2 });
+    expect(mine).toMatchObject({ status: 'downloading', running: true, url: 'https://www.youtube.com/playlist?list=1', total: 2 });
     expect(mine.tasks.map((t) => [t.position, t.title, t.status, t.progress])).toEqual([
       [1, 'First', 'completed', 100],
       [2, 'Second', 'downloading', 40],
     ]);
     expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, other))).body.data.import).toBeNull();
     await prisma.playlistTask.update({ where: { id: job.id }, data: { status: 'completed' } });
+    await prisma.downloadTask.updateMany({ where: { title: 'Second' }, data: { status: 'failed', errorMessage: 'Daily download limit reached' } });
+    const finished = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import;
+    expect(finished).toMatchObject({ running: false });
+    expect(finished.tasks.find((t) => t.title === 'Second')).toMatchObject({ status: 'failed', reason: 'daily_limit' });
+    await prisma.downloadTask.updateMany({ where: { title: 'Second' }, data: { status: 'completed' } });
     expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import).toBeNull();
   });
 

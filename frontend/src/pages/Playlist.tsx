@@ -72,7 +72,7 @@ function PendingRow({ task, info, draggable }: { task: ImportTask; info?: Youtub
   const videoId = info?.videoId ?? videoIdOf(task.url);
   const title = info?.title ?? task.title ?? 'Loading…';
   const failed = task.status === 'failed' || task.status === 'cancelled';
-  const subtitle = failed ? "Couldn't download" : (info?.artists?.join(', ') ?? info?.channel ?? (task.status === 'queued' ? 'Waiting to download' : 'Downloading'));
+  const subtitle = failed ? (task.reason === 'daily_limit' ? 'Daily download limit reached' : "Couldn't download") : (info?.artists?.join(', ') ?? info?.channel ?? (task.status === 'queued' ? 'Waiting to download' : 'Downloading'));
   return (
     <div role="row" aria-busy={!failed} className="relative flex min-h-14 items-center gap-3 rounded-md px-2 py-1.5 opacity-50 sm:px-3">
       {draggable && <Icon name="drag_indicator" className="hidden text-white/40 sm:inline-block" />}
@@ -219,7 +219,7 @@ export default function Playlist() {
           />
         </div>
         <div className="min-w-0 flex-1 pb-6 xl:pt-6">
-          {playlist.import && <ImportBar job={playlist.import} tasks={importTasks} />}
+          {playlist.import?.running && <ImportBar job={playlist.import} tasks={importTasks} />}
           {!order.length && !playlist.import && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
           <div role="table" aria-label="Tracks">
             {rows.map((row) =>

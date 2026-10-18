@@ -60,7 +60,7 @@ const user = () => prisma.user.create({ data: { username: `u${Math.random()}`.sl
 const job = (task, extra = {}) => ({ taskId: task.id, url: task.url, format: 'mp3', quality: '192k', userId: task.requestedBy, playlistTaskId: null, playlistId: null, position: null, ...extra });
 
 beforeEach(async () => {
-  await prisma.$executeRawUnsafe('TRUNCATE users, media, artists, albums, playlists, download_tasks, playlist_tasks CASCADE');
+  await prisma.$executeRawUnsafe('TRUNCATE users, media, artists, albums, playlists, download_tasks, playlist_tasks, settings CASCADE');
 });
 
 describe('slugify', () => {
@@ -175,6 +175,24 @@ describe('playlist job', () => {
     await jobs.playlist({ playlistTaskId: parent.id, url: parent.url, format: 'mp3', quality: '192k', userId: u.id, playlistId: null });
     expect(published).toEqual([]);
     expect((await prisma.playlistTask.findUnique({ where: { id: parent.id } })).status).toBe('completed');
+  });
+
+  it('links library tracks and stops queueing new ones once the daily limit is used up', async () => {
+    const { jobs, published } = await setup({
+      playlist: async () => ({ title: 'YT List', entries: ['have', 'new1', 'new2'].map((id) => ({ url: `https://www.youtube.com/watch?v=${id}`, title: id })) }),
+    });
+    const u = await user();
+    await prisma.setting.create({ data: { key: 'downloads.max_per_user_per_day', value: 1 } });
+    await prisma.media.create({ data: { title: 'have', url: 'https://www.youtube.com/watch?v=have', sourceId: 'have', format: 'mp3', status: 'completed' } });
+    const parent = await prisma.playlistTask.create({ data: { url: 'https://www.youtube.com/playlist?list=1', requestedBy: u.id } });
+    await jobs.playlist({ playlistTaskId: parent.id, url: parent.url, format: 'mp3', quality: '192k', userId: u.id, playlistId: null });
+    expect(published.map((p) => p.url)).toEqual(['https://www.youtube.com/watch?v=new1']);
+    const children = await prisma.downloadTask.findMany({ where: { playlistTaskId: parent.id }, orderBy: { position: 'asc' } });
+    expect(children.map((c) => [c.title, c.status, c.errorMessage])).toEqual([
+      ['have', 'completed', null],
+      ['new1', 'queued', null],
+      ['new2', 'failed', 'Daily download limit reached'],
+    ]);
   });
 
   it('fails empty playlists', async () => {

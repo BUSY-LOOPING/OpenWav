@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { MAX_RETRIES, PLAYLIST_TASK_STATUS, TASK_STATUS, TERMINAL_TASK_STATUSES, retryDelayMs } from '@openwav/shared';
+import { DAILY_LIMIT_MESSAGE, DEFAULT_SETTINGS, MAX_RETRIES, PLAYLIST_TASK_STATUS, TASK_STATUS, TERMINAL_TASK_STATUSES, dailyQuotaWhere, retryDelayMs } from '@openwav/shared';
 import { counter, gauge, histogram } from '@openwav/shared/metrics';
 
 const jobs = counter('download_jobs_total', 'Download jobs by outcome', ['status']);
@@ -38,6 +38,15 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
 
   const completeTask = (tx, taskId, mediaId) =>
     tx.downloadTask.update({ where: { id: taskId }, data: { status: TASK_STATUS.completed, progress: 100, mediaId, completedAt: new Date(), errorMessage: null } });
+
+  async function quotaLeft(userId) {
+    if (!userId) return Infinity;
+    const [row, used] = await Promise.all([
+      prisma.setting.findUnique({ where: { key: 'downloads.max_per_user_per_day' } }),
+      prisma.downloadTask.count({ where: dailyQuotaWhere(userId) }),
+    ]);
+    return (row?.value ?? DEFAULT_SETTINGS['downloads.max_per_user_per_day']) - used;
+  }
 
   async function finishPlaylistTask(playlistTaskId) {
     if (!playlistTaskId) return;
@@ -198,6 +207,7 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
         await prisma.playlist.updateMany({ where: { id: job.playlistId, name: 'Imported playlist' }, data: { name: title.slice(0, 150) } });
       }
       await prisma.playlistTask.update({ where: { id: task.id }, data: { status: PLAYLIST_TASK_STATUS.downloading, totalTracks: entries.length } });
+      let left = await quotaLeft(job.userId);
       for (const [i, entry] of entries.entries()) {
         const childJob = { url: entry.url, format: job.format, quality: job.quality, userId: job.userId, playlistTaskId: task.id, playlistId: job.playlistId, position: i + 1 };
         const data = { url: entry.url, title: entry.title?.slice(0, 500), requestedBy: job.userId, format: job.format, quality: job.quality, playlistTaskId: task.id, targetPlaylistId: job.playlistId, position: i + 1 };
@@ -210,6 +220,11 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
           });
           continue;
         }
+        if (left <= 0) {
+          await prisma.downloadTask.create({ data: { ...data, status: TASK_STATUS.failed, errorMessage: DAILY_LIMIT_MESSAGE } });
+          continue;
+        }
+        left -= 1;
         const child = await prisma.downloadTask.create({ data });
         await publishDownload({ taskId: child.id, ...childJob });
       }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { PLAYLIST_TASK_STATUS, isPlaylistUrl } from '@openwav/shared';
+import { DAILY_LIMIT_MESSAGE, PLAYLIST_TASK_STATUS, TASK_STATUS, isPlaylistUrl } from '@openwav/shared';
 import { badRequest, notFound } from '../lib/errors.js';
 import { uuidParam, validate } from '../lib/http.js';
 import { playlistInclude, trackInclude } from '../lib/serializers.js';
@@ -24,14 +24,25 @@ export function playlistRoutes({ prisma, auth, serialize, playlists, downloads, 
     const job =
       p.createdBy === userId &&
       (await prisma.playlistTask.findFirst({
-        where: { targetPlaylistId: id, status: { in: [PLAYLIST_TASK_STATUS.queued, PLAYLIST_TASK_STATUS.resolving, PLAYLIST_TASK_STATUS.downloading] } },
+        where: { targetPlaylistId: id },
         orderBy: { createdAt: 'desc' },
-        include: { tasks: { orderBy: { position: 'asc' }, select: { id: true, title: true, url: true, status: true, progress: true, position: true } } },
+        include: { tasks: { orderBy: { position: 'asc' }, select: { id: true, title: true, url: true, status: true, progress: true, position: true, errorMessage: true } } },
       }));
+    const running = !!job && [PLAYLIST_TASK_STATUS.queued, PLAYLIST_TASK_STATUS.resolving, PLAYLIST_TASK_STATUS.downloading].includes(job.status);
+    const missing = job ? job.tasks.filter((t) => t.status !== TASK_STATUS.completed) : [];
     return {
       ...serialize.playlist(p, userId),
       tracks: p.tracks.filter((t) => t.media.status === 'completed').map((t) => ({ ...serialize.track(t.media), position: t.position, addedAt: t.addedAt })),
-      import: job ? { status: job.status, url: job.url, total: job.totalTracks, tasks: job.tasks } : null,
+      import:
+        running || missing.length
+          ? {
+              status: job.status,
+              running,
+              url: job.url,
+              total: job.totalTracks,
+              tasks: job.tasks.map(({ errorMessage, ...t }) => ({ ...t, reason: errorMessage === DAILY_LIMIT_MESSAGE ? 'daily_limit' : null })),
+            }
+          : null,
     };
   }
 

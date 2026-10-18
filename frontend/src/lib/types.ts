@@ -63,10 +63,11 @@ export interface Playlist {
 }
 
 export interface PlaylistImport {
-  status: 'queued' | 'resolving' | 'downloading';
+  status: 'queued' | 'resolving' | 'downloading' | 'completed' | 'failed' | 'cancelled';
+  running: boolean;
   url: string;
   total: number;
-  tasks: { id: string; title: string | null; url: string; status: TaskStatus; progress: number; position: number | null }[];
+  tasks: { id: string; title: string | null; url: string; status: TaskStatus; progress: number; position: number | null; reason: 'daily_limit' | null }[];
 }
 
 export interface PlaylistDetail extends Playlist {

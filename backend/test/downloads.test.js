@@ -69,6 +69,22 @@ describe('POST /downloads', () => {
     expect(res.status).toBe(429);
   });
 
+  it('does not count tracks linked from the library towards the daily limit', async () => {
+    await prisma.setting.create({ data: { key: 'downloads.max_per_user_per_day', value: 1 } });
+    await prisma.downloadTask.createMany({ data: Array.from({ length: 5 }, (_, i) => ({ url: `https://youtu.be/have${i}`, requestedBy: user.id, status: 'completed' })) });
+    expect((await download({ url: 'https://youtu.be/fresh' })).status).toBe(202);
+    expect((await download({ url: 'https://youtu.be/fresh2' })).status).toBe(429);
+  });
+
+  it('serves tracks already in the library and imports playlists even over the daily limit', async () => {
+    await prisma.setting.create({ data: { key: 'downloads.max_per_user_per_day', value: 0 } });
+    const have = await createTrack();
+    expect((await download({ url: `https://youtu.be/${have.sourceId}` })).body.data).toMatchObject({ mediaId: have.id });
+    const res = await ctx.request.post('/api/v1/playlists/import').set(bearer(ctx.deps, user)).send({ url: 'https://www.youtube.com/playlist?list=PLx' });
+    expect(res.status).toBe(202);
+    expect(res.body.data.playlistId).toBeTruthy();
+  });
+
   it('lists only the caller’s tasks', async () => {
     await download({ url: 'https://youtu.be/mine' });
     const someoneElse = await createUser();
