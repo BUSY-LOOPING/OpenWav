@@ -181,6 +181,7 @@ model Like {
 model DownloadTask {
   id               String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   url              String        @db.VarChar(1000)
+  title            String?       @db.VarChar(500)
   requestedBy      String?       @map("requested_by") @db.Uuid
   status           TaskStatus    @default(queued)
   progress         Int           @default(0)
