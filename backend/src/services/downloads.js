@@ -1,4 +1,4 @@
-import { DAILY_LIMIT_MESSAGE, EXCHANGE, QUEUES, TASK_STATUS, dailyQuotaWhere, isAllowedDomain, isPlaylistUrl, publishJson } from '@openwav/shared';
+import { DAILY_LIMIT_MESSAGE, EXCHANGE, QUEUES, STORAGE_LIMIT_MESSAGE, TASK_STATUS, TERMINAL_TASK_STATUSES, dailyQuotaWhere, isAllowedDomain, isPlaylistUrl, overStorage, publishJson, storageUsage } from '@openwav/shared';
 import { AppError, badRequest, unavailable } from '../lib/errors.js';
 
 const YT_HOSTS = /(^|\.)(youtube\.com|youtu\.be|music\.youtube\.com)$/;
@@ -30,6 +30,7 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
     if (!userId) return;
     const used = await prisma.downloadTask.count({ where: dailyQuotaWhere(userId) });
     if (used >= s['downloads.max_per_user_per_day']) throw new AppError(429, 'RATE_LIMITED', DAILY_LIMIT_MESSAGE);
+    if (overStorage(await storageUsage(prisma, userId))) throw new AppError(403, 'STORAGE_LIMIT', STORAGE_LIMIT_MESSAGE);
   }
 
   async function publish(routingKey, payload, onFail) {
@@ -64,6 +65,9 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
       if (playlistId) await playlists.addTrack(playlistId, existing.id, userId);
       return { type: 'track', mediaId: existing.id };
     }
+    // One download per track per user, so every view of it follows the same task
+    const active = !playlistId && userId && (await prisma.downloadTask.findFirst({ where: { requestedBy: userId, url, status: { notIn: TERMINAL_TASK_STATUSES } }, select: { id: true } }));
+    if (active) return { type: 'track', taskId: active.id };
     await checkQuota(userId, s);
 
     const task = await prisma.downloadTask.create({ data: { url, requestedBy: userId, format, quality, targetPlaylistId: playlistId } });

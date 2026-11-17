@@ -3,8 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { AlbumCard, ArtistCard, Card, PlaylistCard } from '../components/Card';
 import { NewPlaylistDialog } from '../components/PlaylistDialogs';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
-import { Button, Chips, Icon, Status } from '../components/ui';
-import { loadLikedTracks, useHistory, useLibraryAlbums, useLibraryArtists, useLiked, useMyPlaylists, usePlayCollection } from '../lib/queries';
+import { Button, Chips, Icon, LoadMore, Status } from '../components/ui';
+import { flat, loadLikedTracks, useHistory, useLibraryAlbums, useLibraryArtists, useLiked, useMyPlaylists, usePlayCollection } from '../lib/queries';
 import type { Track } from '../lib/types';
 import { playTracks } from '../store/player';
 import { useAppDispatch } from '../store';
@@ -16,7 +16,7 @@ const LABELS: Record<Tab, string> = { playlists: 'Playlists', songs: 'Songs', al
 const grid = 'grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 [&>*]:w-full [&>*]:max-w-none';
 
 function PlaylistsTab() {
-  const { data, isLoading } = useMyPlaylists();
+  const query = useMyPlaylists();
   const [creating, setCreating] = useState(false);
   const play = usePlayCollection();
   return (
@@ -28,8 +28,11 @@ function PlaylistsTab() {
         <span className="mt-2 text-sm font-medium">New playlist</span>
       </button>
       <Card title="Liked music" subtitle="Auto playlist" images={[]} href="/library?tab=songs" icon="thumb_up" onPlay={() => play(loadLikedTracks)} />
-      {isLoading && <TrackRowSkeleton />}
-      {data?.map((p) => <PlaylistCard key={p.id} playlist={p} />)}
+      {query.isLoading && <TrackRowSkeleton />}
+      {flat(query).map((p) => (
+        <PlaylistCard key={p.id} playlist={p} />
+      ))}
+      <LoadMore query={query} />
       {creating && <NewPlaylistDialog onClose={() => setCreating(false)} />}
     </div>
   );
@@ -37,7 +40,7 @@ function PlaylistsTab() {
 
 function PagedTracks({ query, empty }: { query: ReturnType<typeof useLiked> | ReturnType<typeof useHistory>; empty: string }) {
   const dispatch = useAppDispatch();
-  const tracks: Track[] = query.data?.pages.flatMap((p) => p.data) ?? [];
+  const tracks: Track[] = flat(query);
   if (query.isLoading) return <>{Array.from({ length: 8 }, (_, i) => <TrackRowSkeleton key={i} />)}</>;
   if (!tracks.length) return <Status icon="music_note" title={empty} />;
   return (
@@ -53,13 +56,7 @@ function PagedTracks({ query, empty }: { query: ReturnType<typeof useLiked> | Re
       {tracks.map((t, i) => (
         <TrackRow key={`${t.id}-${i}`} track={t} tracks={tracks} index={i} />
       ))}
-      {query.hasNextPage && (
-        <div className="mt-4 flex justify-center">
-          <Button variant="secondary" onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>
-            Load more
-          </Button>
-        </div>
-      )}
+      <LoadMore query={query} />
     </div>
   );
 }
@@ -73,15 +70,31 @@ function HistoryTab() {
 }
 
 function AlbumsTab() {
-  const { data, isLoading } = useLibraryAlbums();
-  if (!isLoading && !data?.length) return <Status icon="album" title="Albums from your liked songs will appear here" />;
-  return <div className={grid}>{data?.map((a) => <AlbumCard key={a.id} album={a} />)}</div>;
+  const query = useLibraryAlbums();
+  const albums = flat(query);
+  if (!query.isLoading && !albums.length) return <Status icon="album" title="Albums from your liked songs will appear here" />;
+  return (
+    <div className={grid}>
+      {albums.map((a) => (
+        <AlbumCard key={a.id} album={a} />
+      ))}
+      <LoadMore query={query} />
+    </div>
+  );
 }
 
 function ArtistsTab() {
-  const { data, isLoading } = useLibraryArtists();
-  if (!isLoading && !data?.length) return <Status icon="person" title="Artists you subscribe to will appear here" />;
-  return <div className={grid}>{data?.map((a) => <ArtistCard key={a.id} artist={a} />)}</div>;
+  const query = useLibraryArtists();
+  const artists = flat(query);
+  if (!query.isLoading && !artists.length) return <Status icon="person" title="Artists you subscribe to will appear here" />;
+  return (
+    <div className={grid}>
+      {artists.map((a) => (
+        <ArtistCard key={a.id} artist={a} />
+      ))}
+      <LoadMore query={query} />
+    </div>
+  );
 }
 
 export default function Library() {

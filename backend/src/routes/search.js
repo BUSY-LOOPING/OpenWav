@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { badRequest, notFound, unavailable } from '../lib/errors.js';
-import { validate } from '../lib/http.js';
+import { decodeCursor, encodeCursor, pageQuery, validate } from '../lib/http.js';
 import { playlistInclude, tracksByIds } from '../lib/serializers.js';
 
 const SCOPES = ['online', 'library'];
@@ -86,12 +86,32 @@ export function searchRoutes({ prisma, auth, serialize, scraper, events, logger 
     },
   );
 
-  router.get('/playlist/:id', auth.optionalAuth, validate({ params: z.object({ id: z.string().regex(/^[\w-]{10,80}$/) }) }), async (req, res) => {
-    const item = await scraper.playlist(req.params.id).catch((err) => {
+  const playlistId = validate({ params: z.object({ id: z.string().regex(/^[\w-]{10,80}$/) }) });
+  async function loadPlaylist(id) {
+    const item = await scraper.playlist(id).catch((err) => {
       throw err.status === 404 ? notFound('Playlist') : unavailable('Could not load this playlist from YouTube');
     });
     if (!item) throw notFound('Playlist');
-    res.json({ data: { ...item, tracks: await markDownloaded(item.tracks) } });
+    return item;
+  }
+
+  router.get('/playlist/:id', auth.optionalAuth, playlistId, async (req, res) => {
+    const { tracks, ...item } = await loadPlaylist(req.params.id);
+    const marked = await markDownloaded(tracks);
+    res.json({ data: { ...item, trackCount: tracks.length, missing: marked.filter((t) => !t.downloaded).length } });
+  });
+
+  router.get('/playlist/:id/tracks', auth.optionalAuth, playlistId, validate({ query: pageQuery }), async (req, res) => {
+    const { cursor, limit } = req.query;
+    const { tracks } = await loadPlaylist(req.params.id);
+    const start = cursor ? decodeCursor(cursor).value : 0;
+    if (!Number.isInteger(start) || start < 0) throw badRequest('Invalid cursor');
+    const slice = await markDownloaded(tracks.slice(start, start + limit));
+    const end = start + slice.length;
+    res.json({
+      data: slice.map((t, i) => ({ ...t, position: start + i + 1 })),
+      nextCursor: end < tracks.length ? encodeCursor({ index: end, id: req.params.id }, 'index') : null,
+    });
   });
 
   router.get('/suggestions', auth.optionalAuth, validate({ query: z.object({ q }) }), async (req, res) => {

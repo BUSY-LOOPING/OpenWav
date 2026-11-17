@@ -4,11 +4,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from '../lib/toast';
 import { errorMessage, get, send } from '../lib/api';
 import { formatTime } from '../lib/format';
-import { useTaskProgress } from '../lib/progress';
 import { keys, useCreateDownload } from '../lib/queries';
-import type { Task, Track, YoutubeResult } from '../lib/types';
+import type { Track, YoutubeResult } from '../lib/types';
+import { ACTIVE_STATUSES, started } from '../store/downloads';
 import { addToQueue, playNext, playTracks } from '../store/player';
-import { useAppDispatch } from '../store';
+import { useAppDispatch, useAppSelector } from '../store';
 
 export const ytFallback = (videoId: string) => `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 export const subtitleOf = (r: YoutubeResult) =>
@@ -21,48 +21,51 @@ type Intent = 'play' | 'next' | 'queue' | 'download';
 export function usePlayResult(result: YoutubeResult) {
   const dispatch = useAppDispatch();
   const download = useCreateDownload();
-  const [pending, setPending] = useState<{ taskId: string; intent: Intent } | null>(null);
-  const [mediaId, setMediaId] = useState(result.mediaId ?? null);
-  const progress = useTaskProgress(pending ? [pending.taskId] : [])[pending?.taskId ?? ''];
+  const entry = useAppSelector((s) => s.downloads.byVideo[result.videoId]);
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const mediaId = result.mediaId ?? (entry?.status === 'completed' ? entry.mediaId : null);
+  const active = !!entry && ACTIVE_STATUSES.includes(entry.status);
 
-  const act = async (id: string, intent: Intent) => {
-    setMediaId(id);
-    if (intent === 'download') return toast(`${result.title} is in your library`);
+  const act = async (id: string, next: Intent) => {
+    if (next === 'download') return toast(`${result.title} is in your library`);
     const track = await get<Track>(`/media/${id}`);
-    if (intent === 'play') return dispatch(playTracks({ tracks: [track] }));
-    dispatch(intent === 'next' ? playNext(track) : addToQueue(track));
-    toast(intent === 'next' ? 'Song will play next' : 'Song added to queue');
+    if (next === 'play') return dispatch(playTracks({ tracks: [track] }));
+    dispatch(next === 'next' ? playNext(track) : addToQueue(track));
+    toast(next === 'next' ? 'Song will play next' : 'Song added to queue');
   };
 
   useEffect(() => {
-    if (!pending || !progress) return;
-    if (progress.status === 'completed') {
-      get<Task>(`/downloads/${pending.taskId}`)
-        .then((task) => (task.mediaId ? act(task.mediaId, pending.intent) : undefined))
-        .catch((e) => toast(errorMessage(e)))
-        .finally(() => setPending(null));
-    }
-    if (progress.status === 'failed' || progress.status === 'cancelled') {
-      toast(progress.error ?? 'Download failed');
-      setPending(null);
-    }
-  }, [progress, pending]);
+    if (!intent || !entry || active) return;
+    setIntent(null);
+    if (entry.status === 'completed' && entry.mediaId) act(entry.mediaId, intent).catch((e) => toast(errorMessage(e)));
+    else toast(entry.error ?? 'Download failed');
+  }, [entry, intent, active]);
 
-  async function run(intent: Intent = 'play') {
+  async function run(next: Intent = 'play') {
     try {
-      if (mediaId) return await act(mediaId, intent);
+      if (mediaId) return await act(mediaId, next);
+      if (active) return setIntent(next);
       const response = await download.mutateAsync({ url: result.url });
-      if (response.mediaId) return await act(response.mediaId, intent);
+      if (response.mediaId) return await act(response.mediaId, next);
       if (response.taskId) {
-        setPending({ taskId: response.taskId, intent });
-        if (intent !== 'play') toast(`Downloading ${result.title}`);
+        dispatch(started({ videoId: result.videoId, taskId: response.taskId }));
+        setIntent(next);
+        if (next !== 'play') toast(`Downloading ${result.title}`);
       }
     } catch (e) {
       toast(errorMessage(e, 'Could not start download'));
     }
   }
 
-  return { play: () => run('play'), run, mediaId, busy: !!pending || download.isPending, percent: progress?.progress ?? 0, status: progress?.status };
+  return {
+    play: () => run('play'),
+    run,
+    mediaId,
+    busy: active || download.isPending,
+    percent: active ? entry.progress : 0,
+    status: active ? entry.status : undefined,
+    error: entry?.status === 'failed' ? entry.error : null,
+  };
 }
 
 export function useImport() {

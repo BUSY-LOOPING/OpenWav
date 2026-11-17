@@ -5,6 +5,7 @@ import { Logo, TopBar } from './TopBar';
 import { Dialog } from '../Dialog';
 import { IconButton } from '../ui';
 import { track } from '../../lib/events';
+import { useDownloadSync } from '../../lib/progress';
 import { useIsMobile, useMediaQuery } from '../../lib/useMediaQuery';
 import { AudioEngine } from '../../player/AudioEngine';
 import { NowPlaying } from '../../player/NowPlaying';
@@ -37,6 +38,7 @@ export function AppShell() {
   const nowPlayingOpen = useAppSelector((s) => s.player.nowPlayingOpen);
   const previousPath = useRef(location.pathname);
   const collapse = () => nowPlayingOpen && dispatch(setNowPlayingOpen(false));
+  useDownloadSync(useAppSelector((s) => !!s.auth.user));
 
   useEffect(() => {
     const from = previousPath.current;
@@ -52,7 +54,7 @@ export function AppShell() {
     document.getElementById('main')?.scrollTo({ top: 0 });
   }, [location.pathname]);
 
-  const bottomPadding = isMobile ? (hasTrack ? 'pb-36' : 'pb-20') : hasTrack ? 'pb-24' : 'pb-6';
+  const bottomPadding = isMobile ? (hasTrack ? 'pb-[calc(9rem+env(safe-area-inset-bottom))]' : 'pb-[calc(5rem+env(safe-area-inset-bottom))]') : hasTrack ? 'pb-24' : 'pb-6';
 
   return (
     <div className="flex h-full flex-col">

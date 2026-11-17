@@ -175,11 +175,14 @@ describe('home, explore and search', () => {
     const fail = (status) => async () => Promise.reject(Object.assign(new Error('nope'), { status }));
     ctx = buildApp({ scraper: { playlist: async (id) => ({ playlistId: id, title: 'Hotlist', tracks: [song(track.sourceId), song('fresh')] }) } });
     const res = await ctx.request.get('/api/v1/search/playlist/PL1234567890').expect(200);
-    expect(res.body.data.title).toBe('Hotlist');
-    expect(res.body.data.tracks.map((t) => [t.videoId, t.downloaded, t.mediaId])).toEqual([
-      [track.sourceId, true, track.id],
-      ['fresh', false, null],
+    expect(res.body.data).toMatchObject({ title: 'Hotlist', trackCount: 2, missing: 1 });
+    const first = (await ctx.request.get('/api/v1/search/playlist/PL1234567890/tracks?limit=1').expect(200)).body;
+    const second = (await ctx.request.get(`/api/v1/search/playlist/PL1234567890/tracks?limit=1&cursor=${first.nextCursor}`).expect(200)).body;
+    expect([...first.data, ...second.data].map((t) => [t.position, t.videoId, t.downloaded, t.mediaId])).toEqual([
+      [1, track.sourceId, true, track.id],
+      [2, 'fresh', false, null],
     ]);
+    expect(second.nextCursor).toBeNull();
     expect(await prisma.downloadTask.count()).toBe(0);
     expect((await ctx.request.get('/api/v1/search/playlist/bad!id')).status).toBe(400);
     expect((await buildApp({ scraper: { playlist: fail(404) } }).request.get('/api/v1/search/playlist/PL1234567890')).status).toBe(404);

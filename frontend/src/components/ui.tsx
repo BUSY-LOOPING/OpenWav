@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 export function Icon({ name, fill = false, className = '', size }: { name: string; fill?: boolean; className?: string; size?: number }) {
   return (
@@ -132,3 +132,30 @@ export function Button({
 
 export const inputClass =
   'w-full rounded-lg border border-white/10 bg-[#121212] px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:border-white/40';
+
+interface Paged {
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => unknown;
+}
+
+export function LoadMore({ query }: { query: Paged }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !hasNextPage || isFetchingNextPage) return;
+    const observer = new IntersectionObserver(([entry]) => entry.isIntersecting && fetchNextPage(), {
+      root: el.parentElement?.closest('.overflow-y-auto') ?? null,
+      rootMargin: '600px 0px',
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  if (!hasNextPage) return null;
+  return (
+    <div ref={ref} className="col-span-full flex justify-center py-4">
+      {isFetchingNextPage && <Spinner className="h-6 w-6" />}
+    </div>
+  );
+}

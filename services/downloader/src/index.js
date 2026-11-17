@@ -4,7 +4,7 @@ startTracing('downloader');
 
 const fs = await import('node:fs/promises');
 const { prisma } = await import('@openwav/db');
-const { CANCEL_CHANNEL, EXCHANGE, PROGRESS_CHANNEL, QUEUES, RETRY_EXCHANGE, assertTopology, buildProgressEvent, downloadJobSchema, playlistJobSchema, publishJson } = await import('@openwav/shared');
+const { CANCEL_CHANNEL, DEFAULT_SETTINGS, EXCHANGE, PROGRESS_CHANNEL, QUEUES, RETRY_EXCHANGE, assertTopology, buildProgressEvent, downloadJobSchema, playlistJobSchema, publishJson } = await import('@openwav/shared');
 const { createLogger } = await import('@openwav/shared/logger');
 const { initMetrics, startMetricsServer } = await import('@openwav/shared/metrics');
 const { default: amqplib } = await import('amqplib');
@@ -16,7 +16,11 @@ const { createYtdlp } = await import('./ytdlp.js');
 const logger = createLogger('downloader');
 initMetrics('downloader');
 const tempDir = process.env.TEMP_DOWNLOAD_PATH ?? '/app/temp';
-const concurrency = Number(process.env.CONCURRENT_DOWNLOADS) || 3;
+const readConcurrency = async () => {
+  const row = await prisma.setting.findUnique({ where: { key: 'downloads.concurrency' } }).catch(() => null);
+  return Math.max(1, Math.floor(Number(row?.value)) || DEFAULT_SETTINGS['downloads.concurrency']);
+};
+let concurrency = await readConcurrency();
 await fs.mkdir(tempDir, { recursive: true });
 for (const name of await fs.readdir(tempDir)) await fs.rm(`${tempDir}/${name}`, { force: true, recursive: true });
 
@@ -96,6 +100,22 @@ async function connect(attempt = 0) {
   }
 }
 await connect();
+
+// Prefetch only applies to new consumers, so a changed setting re-subscribes the download queue
+setInterval(async () => {
+  const next = await readConcurrency();
+  if (next === concurrency || !channel || draining) return;
+  try {
+    const ch = channel;
+    await ch.prefetch(next);
+    await ch.cancel(tags[0]);
+    tags[0] = (await consume(ch, QUEUES.download, downloadJobSchema, jobs.download)).consumerTag;
+    concurrency = next;
+    logger.info({ concurrency }, 'download concurrency changed');
+  } catch (err) {
+    logger.warn({ err: err.message }, 'could not apply download concurrency');
+  }
+}, 15_000).unref();
 
 async function shutdown(signal) {
   if (draining) return;

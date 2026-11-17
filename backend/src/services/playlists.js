@@ -47,11 +47,20 @@ export function createPlaylistService({ prisma }) {
       });
     },
 
-    reorder: async (playlistId, mediaIds, userId) => {
+    move: async (playlistId, mediaId, to, userId) => {
       await owned(playlistId, userId);
-      await prisma.$transaction(
-        mediaIds.map((mediaId, i) => prisma.playlistTrack.updateMany({ where: { playlistId, mediaId }, data: { position: i + 1 } })),
-      );
+      await prisma.$transaction(async (tx) => {
+        const key = { playlistId_mediaId: { playlistId, mediaId } };
+        const row = await tx.playlistTrack.findUnique({ where: key, select: { position: true } });
+        if (!row) throw notFound('Track');
+        const from = row.position;
+        if (to === from) return;
+        await tx.playlistTrack.updateMany({
+          where: { playlistId, position: to < from ? { gte: to, lt: from } : { gt: from, lte: to } },
+          data: { position: { increment: to < from ? 1 : -1 } },
+        });
+        await tx.playlistTrack.update({ where: key, data: { position: to } });
+      });
     },
   };
 }

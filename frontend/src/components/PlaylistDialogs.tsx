@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog } from './Dialog';
 import { toast } from '../lib/toast';
-import { Button, Chips, Icon, Spinner, Thumb, inputClass } from './ui';
+import { Button, Chips, Icon, LoadMore, Spinner, Thumb, inputClass } from './ui';
 import { errorMessage } from '../lib/api';
-import { useAddToPlaylist, useCreatePlaylist, useImportPlaylist, useMyPlaylists } from '../lib/queries';
+import { flat, useAddToPlaylist, useCreatePlaylist, useImportPlaylist, useMyPlaylists } from '../lib/queries';
 
 export function NewPlaylistDialog({ onClose, onCreated }: { onClose: () => void; onCreated?: (id: string) => void }) {
   const navigate = useNavigate();
@@ -87,10 +87,10 @@ export function NewPlaylistDialog({ onClose, onCreated }: { onClose: () => void;
 }
 
 export function SaveToPlaylistDialog({ mediaId, onClose }: { mediaId: string; onClose: () => void }) {
-  const { data: playlists, isLoading } = useMyPlaylists();
+  const playlists = useMyPlaylists();
   const add = useAddToPlaylist();
   const [creating, setCreating] = useState(false);
-  const owned = (playlists ?? []).filter((p) => p.isOwner);
+  const owned = flat(playlists).filter((p) => p.isOwner);
 
   async function save(playlistId: string, name: string) {
     try {
@@ -122,7 +122,7 @@ export function SaveToPlaylistDialog({ mediaId, onClose }: { mediaId: string; on
         </Button>
       }
     >
-      {isLoading ? (
+      {playlists.isLoading ? (
         <Spinner className="mx-auto my-6" />
       ) : owned.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">You have no playlists yet.</p>
@@ -141,6 +141,9 @@ export function SaveToPlaylistDialog({ mediaId, onClose }: { mediaId: string; on
               </button>
             </li>
           ))}
+          <li>
+            <LoadMore query={playlists} />
+          </li>
         </ul>
       )}
     </Dialog>

@@ -3,10 +3,9 @@ import { toast } from '../../lib/toast';
 import { Button, Chips, inputClass } from '../../components/ui';
 import { errorMessage } from '../../lib/api';
 import { useProgress } from '../../lib/progress';
-import { useAdminAction, useAdminDownloads, useCreateDownload } from '../../lib/queries';
+import { flat, useAdminAction, useAdminDownloads, useCreateDownload } from '../../lib/queries';
 import type { ProgressEvent, Task } from '../../lib/types';
 import { DataList } from './DataList';
-import { usePager } from './usePager';
 
 const TABS = ['queue', 'completed', 'failed', 'cancelled', 'all'] as const;
 type Tab = (typeof TABS)[number];
@@ -35,7 +34,7 @@ export default function Downloads() {
   const query = useAdminDownloads({ status: TAB_STATUS[tab] });
   const action = useAdminAction('downloads');
   const create = useCreateDownload();
-  const { items: pageItems, pager } = usePager(query, tab);
+  const pageItems = flat(query);
   const tasks: Task[] = pageItems.map((t) =>
     live[t.id] ? { ...t, status: live[t.id].status, progress: live[t.id].progress ?? t.progress, title: live[t.id].title ?? t.title } : t,
   );
@@ -121,7 +120,7 @@ export default function Downloads() {
         selected={selected}
         onToggle={toggle}
         onToggleAll={() => setSelected(tasks.every((t) => selected.has(t.id)) ? new Set() : new Set(tasks.map((t) => t.id)))}
-        pager={pager}
+        paged={query}
         columns={[
           {
             header: 'Track',

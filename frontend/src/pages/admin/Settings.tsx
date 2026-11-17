@@ -35,10 +35,16 @@ const GROUPS: { id: string; title: string; fields: Field[] }[] = [
     title: 'Downloads',
     fields: [
       { key: 'downloads.max_per_user_per_day', label: 'Max downloads per user per day', type: 'number', min: 0 },
+      { key: 'downloads.concurrency', label: 'Concurrent downloads', type: 'number', min: 1, max: 20, hint: 'Per downloader instance, applied within 15 seconds' },
       { key: 'downloads.allowed_domains', label: 'Allowed domains', type: 'list', hint: 'One per line' },
       { key: 'downloads.default_format', label: 'Default format', type: 'select', options: FORMATS },
       { key: 'downloads.default_quality', label: 'Default quality', type: 'select', options: QUALITIES },
     ],
+  },
+  {
+    id: 'storage',
+    title: 'Storage',
+    fields: [{ key: 'storage.default_user_quota_gb', label: 'Default storage per user (GB)', type: 'number', min: 0, step: 0.5, hint: '0 = unlimited. Override per user on the Users page' }],
   },
   { id: 'auth', title: 'Accounts', fields: [{ key: 'auth.registration_enabled', label: 'Allow new registrations', type: 'boolean' }] },
   {

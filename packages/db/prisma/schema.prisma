@@ -46,29 +46,30 @@ enum PlaylistTaskStatus {
 }
 
 model User {
-  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  username      String    @unique @db.VarChar(50)
-  email         String    @unique @db.VarChar(255)
-  passwordHash  String    @map("password_hash") @db.VarChar(255)
-  role          Role      @default(user)
-  isActive      Boolean   @default(true) @map("is_active")
-  emailVerified Boolean   @default(false) @map("email_verified")
-  lastLogin     DateTime? @map("last_login") @db.Timestamptz(6)
-  lastSeen      DateTime? @map("last_seen") @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  username          String    @unique @db.VarChar(50)
+  email             String    @unique @db.VarChar(255)
+  passwordHash      String    @map("password_hash") @db.VarChar(255)
+  role              Role      @default(user)
+  isActive          Boolean   @default(true) @map("is_active")
+  emailVerified     Boolean   @default(false) @map("email_verified")
+  lastLogin         DateTime? @map("last_login") @db.Timestamptz(6)
+  lastSeen          DateTime? @map("last_seen") @db.Timestamptz(6)
+  storageQuotaBytes BigInt?   @map("storage_quota_bytes")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  settings          UserSetting[]
-  uploads           Media[]
-  history           UserHistory[]
-  likes             Like[]
-  downloadTasks     DownloadTask[]
-  refreshTokens     RefreshToken[]
-  playlists         Playlist[]
-  addedTracks       PlaylistTrack[]
-  playlistTasks     PlaylistTask[]
-  savedPlaylists    PlaylistSave[]
-  subscriptions     ArtistSubscription[]
+  settings       UserSetting[]
+  uploads        Media[]
+  history        UserHistory[]
+  likes          Like[]
+  downloadTasks  DownloadTask[]
+  refreshTokens  RefreshToken[]
+  playlists      Playlist[]
+  addedTracks    PlaylistTrack[]
+  playlistTasks  PlaylistTask[]
+  savedPlaylists PlaylistSave[]
+  subscriptions  ArtistSubscription[]
 
   @@index([role])
   @@index([lastSeen])
@@ -203,6 +204,7 @@ model DownloadTask {
   targetPlaylist   Playlist?     @relation(fields: [targetPlaylistId], references: [id], onDelete: SetNull)
 
   @@index([status, updatedAt])
+  @@index([requestedBy, status])
   @@index([requestedBy, createdAt(sort: Desc)])
   @@index([playlistTaskId])
   @@index([createdAt(sort: Desc)])
@@ -231,17 +233,17 @@ model PlaylistTask {
 }
 
 model Artist {
-  id            String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name          String               @db.VarChar(500)
-  slug          String               @unique @db.VarChar(500)
-  imageUrl      String?              @map("image_url")
-  genres        String[]
-  bio           String?
-  metadata      Json?
-  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  media         MediaArtist[]
-  subscribers   ArtistSubscription[]
+  id          String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String               @db.VarChar(500)
+  slug        String               @unique @db.VarChar(500)
+  imageUrl    String?              @map("image_url")
+  genres      String[]
+  bio         String?
+  metadata    Json?
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  media       MediaArtist[]
+  subscribers ArtistSubscription[]
 
   @@index([name])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "artists_name_trgm_idx")

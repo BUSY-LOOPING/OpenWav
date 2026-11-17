@@ -1,6 +1,7 @@
 import { Icon, Skeleton, Status } from '../../components/ui';
 import { formatBytes } from '../../lib/format';
-import { useAdminAlerts, useAdminHealth, useAdminStats } from '../../lib/queries';
+import { errorMessage } from '../../lib/api';
+import { useAdminAlerts, useAdminHealth, useAdminServer, useAdminStats } from '../../lib/queries';
 
 function Stat({ label, value, hint, tone = '' }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
@@ -9,6 +10,51 @@ function Stat({ label, value, hint, tone = '' }: { label: string; value: string;
       <p className={`mt-2 text-2xl font-bold ${tone}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
+  );
+}
+
+const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`);
+const bytes = (v: number | null | undefined) => (v === null || v === undefined ? '—' : formatBytes(v));
+const uptime = (sec: number | null) => (sec === null ? '—' : sec >= 86_400 ? `${Math.floor(sec / 86_400)} d ${Math.floor((sec % 86_400) / 3600)} h` : `${Math.floor(sec / 3600)} h ${Math.floor((sec % 3600) / 60)} m`);
+
+function Server() {
+  const { data, isLoading, isError, error } = useAdminServer();
+  if (isLoading) return <Skeleton className="mb-8 h-40 w-full" />;
+  if (isError || !data) return <div className="mb-8"><Status icon="dns" title="Server metrics unavailable" message={errorMessage(error)} /></div>;
+  const { cpu, memory, swap, network } = data;
+  const memUsed = memory.totalBytes !== null && memory.availableBytes !== null ? memory.totalBytes - memory.availableBytes : null;
+  const swapUsed = swap.totalBytes !== null && swap.freeBytes !== null ? swap.totalBytes - swap.freeBytes : null;
+  const ratio = (used: number | null, total: number | null) => (used !== null && total ? used / total : null);
+  const warn = (r: number | null) => ((r ?? 0) >= 0.9 ? 'text-red-400' : '');
+  return (
+    <>
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Stat label="CPU" value={pct(cpu.usage)} hint={`${cpu.cores ?? '—'} cores · load ${cpu.load1?.toFixed(2) ?? '—'}`} tone={warn(cpu.usage)} />
+        <Stat label="Memory" value={pct(ratio(memUsed, memory.totalBytes))} hint={`${bytes(memUsed)} of ${bytes(memory.totalBytes)}`} tone={warn(ratio(memUsed, memory.totalBytes))} />
+        <Stat label="Swap" value={pct(ratio(swapUsed, swap.totalBytes))} hint={`${bytes(swapUsed)} of ${bytes(swap.totalBytes)}`} tone={warn(ratio(swapUsed, swap.totalBytes))} />
+        <Stat label="Network" value={`${bytes(network.rxBytesPerSec)}/s`} hint={`in · ${bytes(network.txBytesPerSec)}/s out`} />
+        <Stat label="Uptime" value={uptime(data.uptimeSec)} />
+      </div>
+      <ul className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Disks">
+        {data.disks.map((d) => {
+          const used = d.availBytes === null ? null : (d.sizeBytes - d.availBytes) / d.sizeBytes;
+          return (
+            <li key={d.device} className="rounded-xl bg-surface p-4">
+              <p className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="truncate font-medium">{d.mount}</span>
+                <span className={`shrink-0 tabular-nums ${warn(used)}`}>{bytes(d.availBytes)} free</span>
+              </p>
+              <div className="my-2 h-2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={`${d.mount} used`} aria-valuenow={Math.round((used ?? 0) * 100)} aria-valuemin={0} aria-valuemax={100}>
+                <div className={`h-full ${(used ?? 0) >= 0.9 ? 'bg-red-400' : 'bg-sky-400'}`} style={{ width: `${(used ?? 0) * 100}%` }} />
+              </div>
+              <p className="text-xs text-muted">
+                {pct(used)} of {bytes(d.sizeBytes)} used · {d.device} · {d.fstype}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
 
@@ -46,6 +92,9 @@ export default function Dashboard() {
           </p>
         )}
       </section>
+
+      <h2 className="mb-3 text-lg font-bold">Server</h2>
+      <Server />
 
       <h2 className="mb-3 text-lg font-bold">Latency</h2>
       <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">

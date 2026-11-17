@@ -49,3 +49,12 @@ export function PlayButtons({ onPlay, onShuffle, disabled }: { onPlay: () => voi
     </>
   );
 }
+
+export function CollectionLayout({ header, children }: { header: ReactNode; children: ReactNode }) {
+  return (
+    <div className="mx-auto flex max-w-[1478px] flex-col gap-4 px-4 sm:px-8 xl:flex-row xl:gap-12 xl:px-12">
+      <div className="xl:w-[380px] xl:shrink-0">{header}</div>
+      <div className="min-w-0 flex-1 pb-6 xl:pt-6">{children}</div>
+    </div>
+  );
+}

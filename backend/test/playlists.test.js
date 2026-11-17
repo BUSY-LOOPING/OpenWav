@@ -21,29 +21,47 @@ describe('playlists', () => {
     expect((await ctx.request.get(`/api/v1/playlists/${res.body.data.id}`)).status).toBe(404);
   });
 
-  it('shows the running import with every entry to the owner only', async () => {
+  const items = async (id, user, query = '') => {
+    const all = [];
+    let cursor = '';
+    do {
+      const res = await ctx.request.get(`/api/v1/playlists/${id}/items?limit=1${query}${cursor ? `&cursor=${cursor}` : ''}`).set(user ? bearer(ctx.deps, user) : {});
+      expect(res.status).toBe(200);
+      all.push(...res.body.data);
+      cursor = res.body.nextCursor;
+    } while (cursor);
+    return all;
+  };
+
+  it('pages downloaded tracks and pending import entries together in playlist order, pending only for the owner', async () => {
     const { id } = (await create()).body.data;
-    const job = await prisma.playlistTask.create({ data: { url: 'https://www.youtube.com/playlist?list=1', requestedBy: owner.id, targetPlaylistId: id, status: 'downloading', totalTracks: 2 } });
+    await ctx.request.post(`/api/v1/playlists/${id}/tracks`).set(bearer(ctx.deps, owner)).send({ mediaId: a.id }).expect(201);
+    const job = await prisma.playlistTask.create({ data: { url: 'https://www.youtube.com/playlist?list=1', requestedBy: owner.id, targetPlaylistId: id, status: 'downloading', totalTracks: 3 } });
     await prisma.downloadTask.createMany({
       data: [
-        { url: 'https://youtu.be/b', title: 'Second', playlistTaskId: job.id, position: 2, status: 'downloading', progress: 40 },
-        { url: 'https://youtu.be/a', title: 'First', playlistTaskId: job.id, position: 1, status: 'completed', progress: 100 },
+        { url: 'https://www.youtube.com/watch?v=b', title: 'Second', playlistTaskId: job.id, position: 2, status: 'downloading', progress: 40 },
+        { url: 'https://www.youtube.com/watch?v=a', title: 'First', playlistTaskId: job.id, position: 1, status: 'completed', progress: 100 },
+        { url: 'https://www.youtube.com/watch?v=c', title: 'Third', playlistTaskId: job.id, position: 3, status: 'failed', errorMessage: 'Storage limit reached' },
       ],
     });
-    const mine = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import;
-    expect(mine).toMatchObject({ status: 'downloading', running: true, url: 'https://www.youtube.com/playlist?list=1', total: 2 });
-    expect(mine.tasks.map((t) => [t.position, t.title, t.status, t.progress])).toEqual([
-      [1, 'First', 'completed', 100],
-      [2, 'Second', 'downloading', 40],
+    const mine = await items(id, owner);
+    expect(mine.map((i) => [i.position, i.track?.id ?? null, i.pending?.title ?? null, i.pending?.progress ?? null])).toEqual([
+      [1, a.id, null, null],
+      [2, null, 'Second', 40],
+      [3, null, 'Third', 0],
     ]);
+    expect(mine[2].pending).toMatchObject({ status: 'failed', reason: 'storage_limit', url: 'https://www.youtube.com/watch?v=c' });
+    expect((await items(id, other)).map((i) => i.track.id)).toEqual([a.id]);
+
+    const summary = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data;
+    expect(summary).not.toHaveProperty('tracks');
+    expect(summary.import).toMatchObject({ status: 'downloading', running: true, total: 3, done: 1, failed: 1 });
     expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, other))).body.data.import).toBeNull();
     await prisma.playlistTask.update({ where: { id: job.id }, data: { status: 'completed' } });
-    await prisma.downloadTask.updateMany({ where: { title: 'Second' }, data: { status: 'failed', errorMessage: 'Daily download limit reached' } });
-    const finished = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import;
-    expect(finished).toMatchObject({ running: false });
-    expect(finished.tasks.find((t) => t.title === 'Second')).toMatchObject({ status: 'failed', reason: 'daily_limit' });
-    await prisma.downloadTask.updateMany({ where: { title: 'Second' }, data: { status: 'completed' } });
+    expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import).toMatchObject({ running: false, failed: 1 });
+    await prisma.downloadTask.updateMany({ where: { status: { not: 'completed' } }, data: { status: 'completed' } });
     expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data.import).toBeNull();
+    expect((await ctx.request.get(`/api/v1/playlists/${id}/items?cursor=junk`)).status).toBe(400);
   });
 
   it('serves public playlists without login', async () => {
@@ -59,13 +77,16 @@ describe('playlists', () => {
       expect((await ctx.request.post(`/api/v1/playlists/${id}/tracks`).set(bearer(ctx.deps, owner)).send({ mediaId: t.id })).status).toBe(201);
     }
     expect((await ctx.request.delete(`/api/v1/playlists/${id}/tracks/${b.id}`).set(bearer(ctx.deps, owner))).status).toBe(204);
-    let pl = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data;
-    expect(pl.tracks.map((t) => [t.id, t.position])).toEqual([[a.id, 1], [c.id, 2]]);
-    expect(pl).toMatchObject({ trackCount: 2, durationSec: 400 });
+    expect((await items(id, owner)).map((i) => [i.track.id, i.position])).toEqual([[a.id, 1], [c.id, 2]]);
+    expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data).toMatchObject({ trackCount: 2, durationSec: 400 });
 
-    await ctx.request.put(`/api/v1/playlists/${id}/order`).set(bearer(ctx.deps, owner)).send({ mediaIds: [c.id, a.id] }).expect(204);
-    pl = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data;
-    expect(pl.tracks.map((t) => t.id)).toEqual([c.id, a.id]);
+    await ctx.request.post(`/api/v1/playlists/${id}/tracks`).set(bearer(ctx.deps, owner)).send({ mediaId: b.id }).expect(201);
+    const move = (mediaId, position) => ctx.request.put(`/api/v1/playlists/${id}/tracks/${mediaId}/position`).set(bearer(ctx.deps, owner)).send({ position });
+    await move(b.id, 1).expect(204);
+    expect((await items(id, owner)).map((i) => [i.track.id, i.position])).toEqual([[b.id, 1], [a.id, 2], [c.id, 3]]);
+    await move(b.id, 3).expect(204);
+    expect((await items(id, owner)).map((i) => [i.track.id, i.position])).toEqual([[a.id, 1], [c.id, 2], [b.id, 3]]);
+    expect((await ctx.request.put(`/api/v1/playlists/${id}/tracks/${b.id}/position`).set(bearer(ctx.deps, other)).send({ position: 1 })).status).toBe(403);
   });
 
   it('forbids non-owners from modifying', async () => {

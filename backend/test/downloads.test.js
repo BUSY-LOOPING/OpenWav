@@ -85,6 +85,28 @@ describe('POST /downloads', () => {
     expect(res.body.data.playlistId).toBeTruthy();
   });
 
+  it('reuses the caller’s running download of the same track so every view follows one task', async () => {
+    const first = (await download({ url: 'https://youtu.be/same1' })).body.data.taskId;
+    expect((await download({ url: 'https://music.youtube.com/watch?v=same1' })).body.data).toEqual({ type: 'track', taskId: first });
+    expect(ctx.channel.messages).toHaveLength(1);
+    const active = await ctx.request.get('/api/v1/downloads?active=true').set(bearer(ctx.deps, user));
+    expect(active.body.data.map((t) => t.id)).toEqual([first]);
+    await prisma.downloadTask.update({ where: { id: first }, data: { status: 'failed' } });
+    expect((await ctx.request.get('/api/v1/downloads?active=true').set(bearer(ctx.deps, user))).body.data).toEqual([]);
+    expect((await download({ url: 'https://youtu.be/same1' })).body.data.taskId).not.toBe(first);
+  });
+
+  it('refuses new downloads once the user’s storage quota is used, defaulting to unlimited', async () => {
+    await createTrack({ uploadedBy: user.id, fileSize: 2 * 1024 ** 3 });
+    expect((await download({ url: 'https://youtu.be/fits' })).status).toBe(202);
+    await prisma.setting.create({ data: { key: 'storage.default_user_quota_gb', value: 1 } });
+    const res = await download({ url: 'https://youtu.be/toomuch' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatchObject({ code: 'STORAGE_LIMIT', message: 'Storage limit reached' });
+    await prisma.user.update({ where: { id: user.id }, data: { storageQuotaBytes: 5 * 1024 ** 3 } });
+    expect((await download({ url: 'https://youtu.be/toomuch' })).status).toBe(202);
+  });
+
   it('lists only the caller’s tasks', async () => {
     await download({ url: 'https://youtu.be/mine' });
     const someoneElse = await createUser();

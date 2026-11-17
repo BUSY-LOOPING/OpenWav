@@ -126,6 +126,30 @@ export function adminRoutes(deps) {
 
   router.get('/alerts', async (_req, res) => res.json({ data: await monitoring.alerts() }));
 
+  router.get('/server', async (_req, res) => {
+    const data = await monitoring.server().catch(() => {
+      throw unavailable('Server metrics are unavailable, check that Prometheus and node-exporter are running');
+    });
+    res.json({ data });
+  });
+
+  const service = z.string().regex(/^[\w-]{1,50}$/).optional();
+  const window = { limit: z.coerce.number().int().min(1).max(500).default(100), sinceSec: z.coerce.number().int().min(60).max(7 * 86_400).default(3600) };
+
+  router.get('/traces', validate({ query: z.object({ service, minDurationMs: z.coerce.number().int().min(0).max(600_000).optional(), ...window }) }), async (req, res) => {
+    const data = await monitoring.traces(req.query).catch(() => {
+      throw unavailable('Tempo is unreachable');
+    });
+    res.json({ data });
+  });
+
+  router.get('/logs', validate({ query: z.object({ service, errorsOnly: z.stringbool().default(false), search: z.string().max(200).optional(), ...window }) }), async (req, res) => {
+    const data = await monitoring.logs(req.query).catch(() => {
+      throw unavailable('Loki is unreachable');
+    });
+    res.json({ data });
+  });
+
   router.get('/users', validate({ query: pageQuery.extend({ search: z.string().max(100).optional(), role: z.enum(['user', 'admin']).optional(), status: z.enum(['active', 'banned']).optional() }) }), async (req, res) => {
     const { cursor, limit, search, role, status } = req.query;
     const rows = await prisma.user.findMany({
@@ -140,13 +164,26 @@ export function adminRoutes(deps) {
       include: { _count: { select: { downloadTasks: true, playlists: true, likes: true } } },
     });
     const { items, nextCursor } = page(rows, limit);
+    const [usage, defaultGb] = await Promise.all([
+      prisma.media.groupBy({ by: ['uploadedBy'], where: { uploadedBy: { in: items.map((u) => u.id) }, status: 'completed' }, _sum: { fileSize: true } }),
+      settings.get('storage.default_user_quota_gb'),
+    ]);
+    const used = new Map(usage.map((u) => [u.uploadedBy, Number(u._sum.fileSize ?? 0)]));
+    const quotaOf = (u) => Number(u.storageQuotaBytes ?? Math.round(defaultGb * 1024 ** 3)) || null;
     res.json({
-      data: items.map((u) => ({ ...serialize.user(u), isActive: u.isActive, lastLogin: u.lastLogin, lastSeen: u.lastSeen, stats: u._count })),
+      data: items.map((u) => ({
+        ...serialize.user(u),
+        isActive: u.isActive,
+        lastLogin: u.lastLogin,
+        lastSeen: u.lastSeen,
+        stats: u._count,
+        storage: { usedBytes: used.get(u.id) ?? 0, quotaBytes: quotaOf(u), custom: u.storageQuotaBytes !== null },
+      })),
       nextCursor,
     });
   });
 
-  router.patch('/users/:id', validate({ params: uuidParam, body: z.object({ role: z.enum(['user', 'admin']).optional(), isActive: z.boolean().optional() }) }), async (req, res) => {
+  router.patch('/users/:id', validate({ params: uuidParam, body: z.object({ role: z.enum(['user', 'admin']).optional(), isActive: z.boolean().optional(), storageQuotaBytes: z.number().int().min(0).nullable().optional() }) }), async (req, res) => {
     if (req.params.id === req.user.id && (req.body.role === 'user' || req.body.isActive === false)) throw badRequest('You cannot demote or ban yourself');
     const user = await prisma.user.update({ where: { id: req.params.id }, data: req.body }).catch(() => {
       throw notFound('User');
@@ -323,4 +360,3 @@ export function adminRoutes(deps) {
 
   return router;
 }
-// Edited by Claude Code
