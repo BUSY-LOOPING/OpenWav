@@ -302,7 +302,7 @@ services:
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
       RUSTFS_CONSOLE_ENABLE: "false"
     volumes:
-      - rustfsdata:/data
+      - ${COLD_STORAGE_DIR:+${COLD_STORAGE_DIR}/}rustfsdata:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
@@ -356,7 +356,7 @@ services:
     volumes:
       - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheusdata:/prometheus
+      - ${COLD_STORAGE_DIR:+${COLD_STORAGE_DIR}/}prometheusdata:/prometheus
 
   alertmanager:
     <<: *restart
@@ -402,7 +402,7 @@ services:
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./infra/observability/tempo/tempo.yaml:/etc/tempo.yaml:ro
-      - tempodata:/var/tempo
+      - ${COLD_STORAGE_DIR:+${COLD_STORAGE_DIR}/}tempodata:/var/tempo
 
   loki:
     <<: *restart
@@ -410,7 +410,7 @@ services:
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
       - ./infra/observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
-      - lokidata:/loki
+      - ${COLD_STORAGE_DIR:+${COLD_STORAGE_DIR}/}lokidata:/loki
 
   promtail:
     <<: *restart
