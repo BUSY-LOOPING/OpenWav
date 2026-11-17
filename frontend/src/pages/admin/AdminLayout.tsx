@@ -49,7 +49,7 @@ export default function AdminLayout() {
           </NavLink>
         </nav>
       </aside>
-      <main className="thin-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
+      <main className="thin-scrollbar relative min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
         <Outlet />
       </main>
     </div>

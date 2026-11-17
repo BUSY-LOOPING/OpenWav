@@ -57,7 +57,7 @@ export function LineChart({ title, series, format, max, height = 160 }: { title:
   const tipLeft = hover === null ? 0 : Math.min(Math.max(x(xs[hover]) + 12, 0), width - 160);
 
   return (
-    <figure className="rounded-xl bg-surface p-4">
+    <figure className="relative rounded-xl bg-surface p-4">
       <figcaption className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="text-sm font-medium">{title}</span>
         {colored.length === 1 && latest[0] !== null && <span className="text-sm tabular-nums text-muted">{format(latest[0])}</span>}
