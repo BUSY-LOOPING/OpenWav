@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { DAILY_LIMIT_MESSAGE, PLAYLIST_TASK_STATUS, STORAGE_LIMIT_MESSAGE, TASK_STATUS, isPlaylistUrl } from '@openwav/shared';
 import { badRequest, notFound } from '../lib/errors.js';
-import { decodeCursor, page, pageQuery, uuidParam, validate } from '../lib/http.js';
+import { cursorWhere, decodeCursor, page, pageQuery, uuidParam, validate } from '../lib/http.js';
 import { playlistInclude, trackInclude } from '../lib/serializers.js';
 
 const fields = {
@@ -60,16 +60,37 @@ export function playlistRoutes({ prisma, auth, serialize, playlists, downloads, 
     res.json({ data: await full(req.params.id, req.user?.id) });
   });
 
-  router.get('/:id/items', auth.optionalAuth, idParams, validate({ query: pageQuery }), async (req, res) => {
+  const SORTS = {
+    recent: { orderBy: [{ addedAt: 'desc' }, { id: 'desc' }], field: 'addedAt', where: (c) => cursorWhere(c, 'addedAt', 'desc') },
+    oldest: { orderBy: [{ addedAt: 'asc' }, { id: 'asc' }], field: 'addedAt', where: (c) => cursorWhere(c, 'addedAt', 'asc') },
+    title: { orderBy: [{ media: { title: 'asc' } }, { id: 'asc' }], field: 'title', where: (c) => byTitle(c, 'gt') },
+    title_desc: { orderBy: [{ media: { title: 'desc' } }, { id: 'desc' }], field: 'title', where: (c) => byTitle(c, 'lt') },
+  };
+  function byTitle(cursor, op) {
+    if (!cursor) return {};
+    const { value, id } = decodeCursor(cursor);
+    return { OR: [{ media: { title: { [op]: value } } }, { media: { title: value }, id: { [op]: id } }] };
+  }
+  const asItem = (t) => ({ id: t.id, position: t.position, addedAt: t.addedAt, title: t.media.title, track: { ...serialize.track(t.media), position: t.position, addedAt: t.addedAt }, pending: null });
+  const strip = ({ addedAt, title, ...item }) => item;
+
+  router.get('/:id/items', auth.optionalAuth, idParams, validate({ query: pageQuery.extend({ sort: z.enum(['position', ...Object.keys(SORTS)]).default('recent'), pending: z.stringbool().default(false) }) }), async (req, res) => {
     const userId = req.user?.id;
-    const { cursor, limit } = req.query;
+    const { cursor, limit, sort, pending } = req.query;
     const p = await visible(req.params.id, userId);
     const job = await latestImport(p, userId);
     const after = cursor ? decodeCursor(cursor) : null;
     const afterWhere = after ? { OR: [{ position: { gt: after.value } }, { position: after.value, id: { gt: after.id } }] } : {};
     const order = [{ position: 'asc' }, { id: 'asc' }];
+    const include = { media: { include: trackInclude(userId) } };
+    if (sort !== 'position' && !pending) {
+      const { orderBy, field, where } = SORTS[sort];
+      const rows = await prisma.playlistTrack.findMany({ where: { AND: [{ playlistId: p.id, media: { status: 'completed' } }, where(cursor)] }, orderBy, take: limit + 1, include });
+      const { items, nextCursor } = page(rows.map(asItem), limit, field);
+      return res.json({ data: items.map(strip), nextCursor });
+    }
     const [tracks, tasks] = await Promise.all([
-      prisma.playlistTrack.findMany({ where: { playlistId: p.id, media: { status: 'completed' }, ...afterWhere }, orderBy: order, take: limit + 1, include: { media: { include: trackInclude(userId) } } }),
+      pending ? [] : prisma.playlistTrack.findMany({ where: { playlistId: p.id, media: { status: 'completed' }, ...afterWhere }, orderBy: order, take: limit + 1, include }),
       job
         ? prisma.downloadTask.findMany({
             where: { playlistTaskId: job.id, status: { not: TASK_STATUS.completed }, position: { not: null }, ...afterWhere },
@@ -81,7 +102,7 @@ export function playlistRoutes({ prisma, auth, serialize, playlists, downloads, 
     ]);
     // Downloaded tracks and still-pending import entries share one position-ordered list
     const merged = [
-      ...tracks.map((t) => ({ id: t.id, position: t.position, track: { ...serialize.track(t.media), position: t.position, addedAt: t.addedAt }, pending: null })),
+      ...tracks.map((t) => strip(asItem(t))),
       ...tasks.map(({ errorMessage, ...t }) => ({ id: t.id, position: t.position, track: null, pending: { ...t, reason: REASONS[errorMessage] ?? null } })),
     ].sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1));
     const { items, nextCursor } = page(merged, limit, 'position');

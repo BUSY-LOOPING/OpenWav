@@ -176,6 +176,7 @@ export interface OnlinePlaylistTrack extends YoutubeResult {
 
 export interface OnlineResults {
   top: YoutubeResult | OnlineAlbum | OnlineArtist | null;
+  topSongs: YoutubeResult[];
   songs: YoutubeResult[];
   videos: YoutubeResult[];
   albums: OnlineAlbum[];
@@ -306,6 +307,7 @@ export interface AdminUser extends User {
   isActive: boolean;
   lastSeen?: string | null;
   storage: { usedBytes: number; quotaBytes: number | null; custom: boolean };
+  permissions: { canDownload: boolean; dailyDownloadLimit: number | null; maxQuality: string | null };
 }
 
 export interface ServerMetrics {
@@ -314,7 +316,111 @@ export interface ServerMetrics {
   swap: { totalBytes: number | null; freeBytes: number | null };
   uptimeSec: number | null;
   network: { rxBytesPerSec: number | null; txBytesPerSec: number | null };
-  disks: { mount: string; device: string; fstype: string; sizeBytes: number; availBytes: number | null }[];
+  disks: Disk[];
+  coldStorageDir: string | null;
+}
+
+export interface Disk {
+  mount: string;
+  device: string;
+  fstype: string;
+  sizeBytes: number;
+  availBytes: number | null;
+}
+
+export type TimePoint = [number, number | null];
+
+export interface ServerHistory {
+  range: string;
+  step: number;
+  cpu: TimePoint[];
+  memory: TimePoint[];
+  swap: TimePoint[];
+  network: { rx: TimePoint[]; tx: TimePoint[] };
+  disks: { mount: string; points: TimePoint[] }[];
+  requests: TimePoint[];
+  p95: TimePoint[];
+  downloads: { completed: TimePoint[]; failed: TimePoint[] };
+}
+
+export interface Session {
+  id: string;
+  device: string;
+  userAgent: string | null;
+  ip: string | null;
+  startedAt: string;
+  lastActiveAt: string;
+  current: boolean;
+}
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  actor: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  details: Record<string, unknown> | null;
+  ip: string | null;
+  createdAt: string;
+}
+
+export interface QueueStatus {
+  paused: boolean;
+  queues: { name: string; messages: number; consumers: number }[];
+  scheduler: { job: string; ok: number; error: number }[];
+}
+
+export interface DeadLetter {
+  id: string;
+  queue: string | null;
+  reason: string | null;
+  deaths: number;
+  url: string | null;
+  title: string | null;
+  error: string | null;
+}
+
+export interface YtdlpHealth {
+  status: { version: string | null; latest: string | null; checkedAt: string | null; updating: boolean; lastUpdate: { at: string; ok: boolean; output: string } | null } | null;
+  lastSuccessAt: string | null;
+  last24h: { completed: number; failed: number; successRate: number | null };
+  topErrors: { message: string; count: number }[];
+}
+
+export interface StorageReport {
+  tiers: {
+    hot: { disk: Disk | null; holds: string };
+    cold: { path: string | null; disk: Disk | null; holds: string };
+  };
+  databaseBytes: number;
+  library: { tracks: number; bytes: number };
+  byFormat: { format: string | null; quality: string | null; tracks: number; bytes: number }[];
+  largest: { id: string; title: string; fileSize: number; format: string | null; quality: string | null; playCount: number }[];
+  cleanup: { enabled: boolean; unplayedDays: number; lastRunAt: string | null; preview: { days: number; count: number; bytes: number; sample: { id: string; title: string; fileSize: number; createdAt: string }[] } };
+}
+
+export interface Analytics {
+  days: number;
+  totals: { plays: number; listeners: number };
+  daily: { day: string; plays: number; listeners: number; downloads: number; signups: number }[];
+  topTracks: { id: string; title: string; plays: number; listeners: number }[];
+  topArtists: { id: string; name: string; plays: number }[];
+  topUsers: { id: string; username: string; plays: number }[];
+  searchMisses: { term: string; count: number }[];
+}
+
+export interface ScraperStatus {
+  health: 'up' | 'down';
+  stats: { config: { cacheTtlSec: number; timeoutSec: number; maxConcurrency: number; retries: number }; cache: { entries: number; hits: number; misses: number } } | null;
+  settings: Record<string, number>;
+  routes: { route: string; rps: number; p95Ms: number | null }[];
+  upstreamErrors: { source: string; count: number }[];
+}
+
+export interface ScraperRun {
+  status: number;
+  durationMs: number;
+  body: unknown;
 }
 
 export interface TraceSummary {

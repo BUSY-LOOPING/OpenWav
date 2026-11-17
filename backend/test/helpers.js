@@ -41,6 +41,13 @@ export function fakeChannel() {
       cb(null);
       return true;
     },
+    dead: [],
+    acked: [],
+    checkQueue: async (name) => ({ queue: name, messageCount: name === 'downloads.dead' ? channel.dead.length : 0, consumerCount: name === 'downloads' ? 1 : 0 }),
+    get: async () => channel.dead.shift() ?? false,
+    ack: (msg) => channel.acked.push(msg),
+    nack: (msg, _all, requeue) => requeue && channel.dead.push(msg),
+    purgeQueue: async () => ({ messageCount: channel.dead.splice(0).length }),
   };
   return channel;
 }
@@ -63,7 +70,7 @@ export function buildApp(overrides = {}) {
     scraper: { search: async () => [], related: async () => [], suggestions: async () => [], playlist: async () => null, health: async () => ({}) },
     recommender: { forUser: async () => [], similar: async () => [], retrain: async () => ({}), insights: async () => ({ status: { state: 'idle' } }), health: async () => ({}) },
     lyrics: { find: async () => ({ plain: 'la la', synced: null }) },
-    monitoring: { latency: async () => ({ p95Ms: 120, p99Ms: 400, errorRate: 0 }), alerts: async () => [] },
+    monitoring: { latency: async () => ({ p95Ms: 120, p99Ms: 400, errorRate: 0 }), alerts: async () => [], vector: async () => [], range: async () => [], server: async () => Promise.reject(new Error('no prometheus')) },
     ...overrides,
   };
   const { app, deps } = createApp(external);

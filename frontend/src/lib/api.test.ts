@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expiresSoon } from './api';
+import { expiresSoon, usesAccessToken } from './api';
 
 const jwt = (payload: object) => `h.${btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}.s`;
 
@@ -10,5 +10,15 @@ describe('expiresSoon', () => {
     expect(expiresSoon(jwt({ exp: now / 1000 - 5 }), now)).toBe(true);
     expect(expiresSoon(jwt({ exp: now / 1000 + 600 }), now)).toBe(false);
     expect(expiresSoon('not-a-jwt', now)).toBe(false);
+  });
+});
+
+describe('usesAccessToken', () => {
+  it('refreshes ahead of signed-in auth calls like /auth/me but not the login flow itself', () => {
+    expect(usesAccessToken('/auth/me')).toBe(true);
+    expect(usesAccessToken('/auth/sessions')).toBe(true);
+    expect(usesAccessToken('/auth/refresh')).toBe(false);
+    expect(usesAccessToken('/auth/login')).toBe(false);
+    expect(usesAccessToken('/library/liked')).toBe(true);
   });
 });

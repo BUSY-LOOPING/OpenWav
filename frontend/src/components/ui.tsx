@@ -31,6 +31,30 @@ export function IconButton({ icon, label, fill, size, active, className = '', ..
   );
 }
 
+const ART = [
+  ['#f2a7b5', '#7d6cf0'],
+  ['#6fc3f7', '#4a4fd8'],
+  ['#ffc46b', '#e8536a'],
+  ['#62d6b0', '#1c8fb8'],
+  ['#d68cf2', '#6a3cc9'],
+];
+
+const hashOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+// Default artwork: a gradient tile with the icon on a white card, sized to the tile
+export function DefaultArt({ icon = 'music_note', seed = '', rounded = 'rounded', className = '' }: { icon?: string; seed?: string; rounded?: string; className?: string }) {
+  const [from, to] = ART[hashOf(seed || icon) % ART.length];
+  return (
+    <div className={`@container flex items-center justify-center ${rounded} ${className}`} style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}>
+      <span className="flex size-[58cqw] items-center justify-center rounded-[18%] bg-white/95 shadow-sm">
+        <span aria-hidden="true" className="icon icon-fill text-[38cqw]" style={{ color: to }}>
+          {icon}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 export function Thumb({
   src,
   alt = '',
@@ -38,6 +62,7 @@ export function Thumb({
   rounded = 'rounded',
   icon = 'music_note',
   fallback,
+  seed,
 }: {
   src: string | null | undefined;
   alt?: string;
@@ -45,16 +70,11 @@ export function Thumb({
   rounded?: string;
   icon?: string;
   fallback?: string | null;
+  seed?: string;
 }) {
   const [failed, setFailed] = useState<string[]>([]);
   const url = [src, fallback].find((u): u is string => !!u && !failed.includes(u));
-  if (!url) {
-    return (
-      <div className={`flex items-center justify-center bg-raised text-white/30 ${rounded} ${className}`}>
-        <Icon name={icon} />
-      </div>
-    );
-  }
+  if (!url) return <DefaultArt icon={icon} seed={seed ?? alt} rounded={rounded} className={className} />;
   return <img src={url} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed((f) => [...f, url])} className={`object-cover ${rounded} ${className}`} />;
 }
 

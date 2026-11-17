@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { Ambient } from '../components/Ambient';
 import { AlbumCard } from '../components/Card';
 import { Carousel } from '../components/Carousel';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
@@ -18,7 +19,8 @@ export default function Artist() {
   if (isError || !artist) return <Status icon="person_off" title="Artist not found" />;
 
   return (
-    <div>
+    <div className="relative isolate">
+      {!artist.imageUrl && <Ambient src={artist.topTracks[0]?.thumbnailUrl} />}
       <header className="relative flex min-h-[320px] items-end overflow-hidden sm:min-h-[420px]">
         {artist.imageUrl && <img src={artist.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />}
         <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/60 to-transparent" />

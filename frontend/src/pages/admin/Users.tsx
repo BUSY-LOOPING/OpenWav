@@ -4,7 +4,8 @@ import { toast } from '../../lib/toast';
 import { Button, Chips, inputClass } from '../../components/ui';
 import { errorMessage } from '../../lib/api';
 import { formatBytes } from '../../lib/format';
-import { flat, useAdminAction, useAdminUsers } from '../../lib/queries';
+import { flat, useAdminAction, useAdminUsers, useUserSessions } from '../../lib/queries';
+import { SessionList } from '../../components/SessionList';
 import type { AdminUser } from '../../lib/types';
 import { useAppSelector } from '../../store';
 import { DataList } from './DataList';
@@ -30,16 +31,30 @@ function StorageCell({ user, onEdit }: { user: AdminUser; onEdit: () => void }) 
   );
 }
 
-function QuotaDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+const QUALITIES = ['64k', '96k', '128k', '160k', '192k', '256k', '320k'];
+
+function LimitsDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const action = useAdminAction('users');
   const [gb, setGb] = useState(user.storage.custom ? String((user.storage.quotaBytes ?? 0) / GB) : '');
-  const valid = gb.trim() === '' || (Number.isFinite(Number(gb)) && Number(gb) >= 0);
-  const save = (storageQuotaBytes: number | null) =>
+  const [canDownload, setCanDownload] = useState(user.permissions.canDownload);
+  const [daily, setDaily] = useState(user.permissions.dailyDownloadLimit === null ? '' : String(user.permissions.dailyDownloadLimit));
+  const [maxQuality, setMaxQuality] = useState(user.permissions.maxQuality ?? '');
+  const number = (v: string) => v.trim() === '' || (Number.isFinite(Number(v)) && Number(v) >= 0);
+  const save = () =>
     action.mutate(
-      { method: 'patch', url: `/admin/users/${user.id}`, body: { storageQuotaBytes } },
+      {
+        method: 'patch',
+        url: `/admin/users/${user.id}`,
+        body: {
+          storageQuotaBytes: gb.trim() === '' ? null : Math.round(Number(gb) * GB),
+          canDownload,
+          dailyDownloadLimit: daily.trim() === '' ? null : Math.round(Number(daily)),
+          maxQuality: maxQuality || null,
+        },
+      },
       {
         onSuccess: () => {
-          toast('Storage limit updated');
+          toast('Limits updated');
           onClose();
         },
         onError: (e) => toast(errorMessage(e)),
@@ -47,24 +62,66 @@ function QuotaDialog({ user, onClose }: { user: AdminUser; onClose: () => void }
     );
   return (
     <Dialog
-      title={`Storage limit for ${user.username}`}
+      title={`Limits for ${user.username}`}
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" onClick={() => save(null)} disabled={action.isPending}>
-            Use default
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
           </Button>
-          <Button onClick={() => save(gb.trim() === '' ? null : Math.round(Number(gb) * GB))} disabled={!valid || action.isPending}>
+          <Button onClick={save} disabled={!number(gb) || !number(daily) || action.isPending}>
             Save
           </Button>
         </>
       }
     >
-      <label className="flex flex-col gap-1 pb-2 text-xs text-muted">
-        Limit in GB (0 = unlimited, blank = default)
-        <input className={inputClass} type="number" min={0} step="0.5" inputMode="decimal" value={gb} onChange={(e) => setGb(e.target.value)} />
-      </label>
-      <p className="pb-2 text-xs text-muted">Using {formatBytes(user.storage.usedBytes)}. New downloads stop once the limit is reached; existing tracks stay.</p>
+      <div className="flex flex-col gap-4 pb-2">
+        <label className="flex items-center justify-between text-sm">
+          Can download new songs
+          <input type="checkbox" role="switch" checked={canDownload} onChange={(e) => setCanDownload(e.target.checked)} className="h-5 w-9 accent-white" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          Storage limit in GB (0 = unlimited, blank = default)
+          <input className={inputClass} type="number" min={0} step="0.5" inputMode="decimal" value={gb} onChange={(e) => setGb(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          Downloads per day (blank = default)
+          <input className={inputClass} type="number" min={0} inputMode="numeric" value={daily} onChange={(e) => setDaily(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          Highest audio quality
+          <select className={inputClass} value={maxQuality} onChange={(e) => setMaxQuality(e.target.value)}>
+            <option value="">No cap</option>
+            {QUALITIES.map((q) => (
+              <option key={q}>{q}</option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs text-muted">Using {formatBytes(user.storage.usedBytes)}. Over the storage limit new downloads stop; existing tracks stay.</p>
+      </div>
+    </Dialog>
+  );
+}
+
+function DevicesDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const sessions = useUserSessions(user.id);
+  const action = useAdminAction('users');
+  const revoke = (url: string, done: string) => action.mutate({ method: 'delete', url }, { onSuccess: () => (toast(done), sessions.refetch()), onError: (e) => toast(errorMessage(e)) });
+  return (
+    <Dialog
+      title={`${user.username}'s devices`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="danger" disabled={!sessions.data?.length} onClick={() => revoke(`/admin/users/${user.id}/sessions`, 'Signed out everywhere')}>
+            Sign out everywhere
+          </Button>
+          <Button onClick={onClose}>Done</Button>
+        </>
+      }
+    >
+      <SessionList sessions={sessions.data} loading={sessions.isLoading} onRevoke={(s) => revoke(`/admin/users/${user.id}/sessions/${s.id}`, `Signed out ${s.device}`)} />
+      <p className="pb-2 text-xs text-muted">A signed-out device loses access within 15 minutes, when its current access token expires.</p>
     </Dialog>
   );
 }
@@ -75,7 +132,8 @@ export default function Users() {
   const [debounced, setDebounced] = useState('');
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
-  const [quota, setQuota] = useState<AdminUser | null>(null);
+  const [limits, setLimits] = useState<AdminUser | null>(null);
+  const [devices, setDevices] = useState<AdminUser | null>(null);
   const action = useAdminAction('users');
 
   useEffect(() => {
@@ -138,27 +196,35 @@ export default function Users() {
             header: 'Status',
             cell: (u) => <span className={`rounded px-2 py-0.5 text-xs ${u.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{u.isActive ? 'active' : 'banned'}</span>,
           },
-          { header: 'Storage', cell: (u) => <StorageCell user={u} onEdit={() => setQuota(u)} /> },
+          { header: 'Storage', cell: (u) => <StorageCell user={u} onEdit={() => setLimits(u)} /> },
           { header: 'Joined', cell: (u) => new Date(u.createdAt).toLocaleDateString() },
           {
             header: 'Actions',
-            cell: (u) =>
-              u.id === me?.id ? (
-                <span className="text-xs text-muted">You</span>
-              ) : (
-                <div className="flex gap-2">
-                  <Button variant="secondary" className="px-3 py-1" onClick={() => run('patch', u, { isActive: !u.isActive }, u.isActive ? 'User banned' : 'User unbanned')}>
-                    {u.isActive ? 'Ban' : 'Unban'}
-                  </Button>
-                  <Button variant="danger" className="px-3 py-1" onClick={() => setDeleting(u)}>
-                    Delete
-                  </Button>
-                </div>
-              ),
+            cell: (u) => (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" className="px-3 py-1" onClick={() => setLimits(u)}>
+                  Limits
+                </Button>
+                <Button variant="secondary" className="px-3 py-1" onClick={() => setDevices(u)}>
+                  Devices
+                </Button>
+                {u.id !== me?.id && (
+                  <>
+                    <Button variant="secondary" className="px-3 py-1" onClick={() => run('patch', u, { isActive: !u.isActive }, u.isActive ? 'User banned' : 'User unbanned')}>
+                      {u.isActive ? 'Ban' : 'Unban'}
+                    </Button>
+                    <Button variant="danger" className="px-3 py-1" onClick={() => setDeleting(u)}>
+                      Delete
+                    </Button>
+                  </>
+                )}
+              </div>
+            ),
           },
         ]}
       />
-      {quota && <QuotaDialog user={quota} onClose={() => setQuota(null)} />}
+      {limits && <LimitsDialog user={limits} onClose={() => setLimits(null)} />}
+      {devices && <DevicesDialog user={devices} onClose={() => setDevices(null)} />}
       {deleting && (
         <Dialog
           title="Delete user?"

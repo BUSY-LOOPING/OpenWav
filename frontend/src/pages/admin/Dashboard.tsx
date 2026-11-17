@@ -1,7 +1,10 @@
-import { Icon, Skeleton, Status } from '../../components/ui';
+import { useState } from 'react';
+import { LineChart } from '../../components/LineChart';
+import { Chips, Icon, Skeleton, Status } from '../../components/ui';
 import { formatBytes } from '../../lib/format';
 import { errorMessage } from '../../lib/api';
-import { useAdminAlerts, useAdminHealth, useAdminServer, useAdminStats } from '../../lib/queries';
+import { useAdminAlerts, useAdminHealth, useAdminServer, useAdminServerHistory, useAdminStats } from '../../lib/queries';
+import type { Disk } from '../../lib/types';
 
 function Stat({ label, value, hint, tone = '' }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
@@ -17,15 +20,81 @@ const pct = (v: number | null | undefined) => (v === null || v === undefined ? '
 const bytes = (v: number | null | undefined) => (v === null || v === undefined ? '—' : formatBytes(v));
 const uptime = (sec: number | null) => (sec === null ? '—' : sec >= 86_400 ? `${Math.floor(sec / 86_400)} d ${Math.floor((sec % 86_400) / 3600)} h` : `${Math.floor(sec / 3600)} h ${Math.floor((sec % 3600) / 60)} m`);
 
+const RANGES = ['1h', '6h', '24h', '7d'] as const;
+
+const diskFor = (disks: Disk[], path: string) =>
+  disks.filter((d) => path === d.mount || path.startsWith(d.mount.endsWith('/') ? d.mount : `${d.mount}/`)).sort((a, b) => b.mount.length - a.mount.length)[0] ?? null;
+
+function DiskCard({ disk, title, note }: { disk: Disk; title?: string; note?: string }) {
+  const used = disk.availBytes === null ? null : (disk.sizeBytes - disk.availBytes) / disk.sizeBytes;
+  const warn = (used ?? 0) >= 0.9;
+  return (
+    <li className="rounded-xl bg-surface p-4">
+      <p className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="min-w-0 truncate font-medium">{title ?? disk.mount}</span>
+        <span className={`flex shrink-0 items-center gap-1 tabular-nums ${warn ? 'text-red-400' : ''}`}>
+          {warn && <Icon name="warning" size={16} />}
+          {bytes(disk.availBytes)} free
+        </span>
+      </p>
+      <div className="my-2 h-2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={`${disk.mount} used`} aria-valuenow={Math.round((used ?? 0) * 100)} aria-valuemin={0} aria-valuemax={100}>
+        <div className={`h-full rounded-r ${warn ? 'bg-red-400' : 'bg-[var(--color-series-1)]'}`} style={{ width: `${(used ?? 0) * 100}%` }} />
+      </div>
+      <p className="text-xs text-muted">
+        {pct(used)} of {bytes(disk.sizeBytes)} used · {disk.mount} · {disk.device}
+      </p>
+      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
+    </li>
+  );
+}
+
+function History() {
+  const [range, setRange] = useState<(typeof RANGES)[number]>('6h');
+  const { data, isLoading, isError } = useAdminServerHistory(range);
+  const percent = (v: number) => `${Math.round(v * 100)}%`;
+  const rate = (v: number) => `${formatBytes(v)}/s`;
+  return (
+    <section aria-label="History" className="mb-8">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold">History</h2>
+        <Chips options={RANGES} value={range} onChange={setRange} />
+      </div>
+      {isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : isError || !data ? (
+        <Status icon="show_chart" title="History unavailable" message="Prometheus could not be reached." />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <LineChart title="CPU, memory and swap" max={1} format={percent} series={[{ label: 'CPU', points: data.cpu }, { label: 'Memory', points: data.memory }, { label: 'Swap', points: data.swap }]} />
+          <LineChart title="Network" format={rate} series={[{ label: 'In', points: data.network.rx }, { label: 'Out', points: data.network.tx }]} />
+          <LineChart title="Disk used" max={1} format={percent} series={data.disks.slice(0, 3).map((d) => ({ label: d.mount, points: d.points }))} />
+          <LineChart title="Downloads" format={(v) => String(Math.round(v))} series={[{ label: 'Completed', points: data.downloads.completed }, { label: 'Failed', points: data.downloads.failed }]} />
+          <LineChart title="API requests per second" format={(v) => v.toFixed(v < 10 ? 1 : 0)} series={[{ label: 'Requests', points: data.requests }]} />
+          <LineChart title="API P95 latency" format={(v) => `${Math.round(v)} ms`} series={[{ label: 'P95', points: data.p95 }]} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Server() {
   const { data, isLoading, isError, error } = useAdminServer();
   if (isLoading) return <Skeleton className="mb-8 h-40 w-full" />;
-  if (isError || !data) return <div className="mb-8"><Status icon="dns" title="Server metrics unavailable" message={errorMessage(error)} /></div>;
+  if (isError || !data)
+    return (
+      <div className="mb-8">
+        <Status icon="dns" title="Server metrics unavailable" message={errorMessage(error)} />
+      </div>
+    );
   const { cpu, memory, swap, network } = data;
   const memUsed = memory.totalBytes !== null && memory.availableBytes !== null ? memory.totalBytes - memory.availableBytes : null;
   const swapUsed = swap.totalBytes !== null && swap.freeBytes !== null ? swap.totalBytes - swap.freeBytes : null;
   const ratio = (used: number | null, total: number | null) => (used !== null && total ? used / total : null);
   const warn = (r: number | null) => ((r ?? 0) >= 0.9 ? 'text-red-400' : '');
+  const hot = diskFor(data.disks, '/');
+  const coldDisk = data.coldStorageDir ? diskFor(data.disks, data.coldStorageDir) : null;
+  const cold = coldDisk && coldDisk.device !== hot?.device ? coldDisk : null;
+  const others = data.disks.filter((d) => d !== hot && d !== cold);
   return (
     <>
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -35,25 +104,24 @@ function Server() {
         <Stat label="Network" value={`${bytes(network.rxBytesPerSec)}/s`} hint={`in · ${bytes(network.txBytesPerSec)}/s out`} />
         <Stat label="Uptime" value={uptime(data.uptimeSec)} />
       </div>
-      <ul className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Disks">
-        {data.disks.map((d) => {
-          const used = d.availBytes === null ? null : (d.sizeBytes - d.availBytes) / d.sizeBytes;
-          return (
-            <li key={d.device} className="rounded-xl bg-surface p-4">
-              <p className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="truncate font-medium">{d.mount}</span>
-                <span className={`shrink-0 tabular-nums ${warn(used)}`}>{bytes(d.availBytes)} free</span>
-              </p>
-              <div className="my-2 h-2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={`${d.mount} used`} aria-valuenow={Math.round((used ?? 0) * 100)} aria-valuemin={0} aria-valuemax={100}>
-                <div className={`h-full ${(used ?? 0) >= 0.9 ? 'bg-red-400' : 'bg-sky-400'}`} style={{ width: `${(used ?? 0) * 100}%` }} />
-              </div>
-              <p className="text-xs text-muted">
-                {pct(used)} of {bytes(d.sizeBytes)} used · {d.device} · {d.fstype}
-              </p>
-            </li>
-          );
-        })}
+      <h3 className="mb-2 text-sm font-medium text-muted">Storage</h3>
+      <ul className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Storage tiers">
+        {hot && <DiskCard disk={hot} title="Hot storage · SSD" note="Database, cache, queues and downloads in progress" />}
+        {cold ? (
+          <DiskCard disk={cold} title="Cold storage · HDD" note={`Audio, covers, metrics, logs and traces in ${data.coldStorageDir}`} />
+        ) : (
+          <li className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-muted">
+            Cold storage isn't set up. Set <code className="text-white">COLD_STORAGE_DIR</code> to a folder on a bigger disk to move audio and observability data off the main drive.
+          </li>
+        )}
       </ul>
+      {!!others.length && (
+        <ul className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Other disks">
+          {others.map((d) => (
+            <DiskCard key={d.device} disk={d} />
+          ))}
+        </ul>
+      )}
     </>
   );
 }
@@ -95,6 +163,7 @@ export default function Dashboard() {
 
       <h2 className="mb-3 text-lg font-bold">Server</h2>
       <Server />
+      <History />
 
       <h2 className="mb-3 text-lg font-bold">Latency</h2>
       <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">

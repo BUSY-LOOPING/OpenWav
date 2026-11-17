@@ -4,23 +4,25 @@ startTracing('downloader');
 
 const fs = await import('node:fs/promises');
 const { prisma } = await import('@openwav/db');
-const { CANCEL_CHANNEL, DEFAULT_SETTINGS, EXCHANGE, PROGRESS_CHANNEL, QUEUES, RETRY_EXCHANGE, assertTopology, buildProgressEvent, downloadJobSchema, playlistJobSchema, publishJson } = await import('@openwav/shared');
+const { CANCEL_CHANNEL, DEFAULT_SETTINGS, YTDLP_UPDATE_CHANNEL, EXCHANGE, PROGRESS_CHANNEL, QUEUES, RETRY_EXCHANGE, assertTopology, buildProgressEvent, downloadJobSchema, playlistJobSchema, publishJson } = await import('@openwav/shared');
 const { createLogger } = await import('@openwav/shared/logger');
 const { initMetrics, startMetricsServer } = await import('@openwav/shared/metrics');
 const { default: amqplib } = await import('amqplib');
 const { Redis } = await import('ioredis');
 const { createJobs } = await import('./jobs.js');
+const { createYtdlpMaintenance } = await import('./maintenance.js');
 const { createStorage } = await import('./storage.js');
 const { createYtdlp } = await import('./ytdlp.js');
 
 const logger = createLogger('downloader');
 initMetrics('downloader');
 const tempDir = process.env.TEMP_DOWNLOAD_PATH ?? '/app/temp';
-const readConcurrency = async () => {
-  const row = await prisma.setting.findUnique({ where: { key: 'downloads.concurrency' } }).catch(() => null);
-  return Math.max(1, Math.floor(Number(row?.value)) || DEFAULT_SETTINGS['downloads.concurrency']);
+const readControls = async () => {
+  const rows = await prisma.setting.findMany({ where: { key: { in: ['downloads.concurrency', 'downloads.paused'] } } }).catch(() => []);
+  const value = (key) => rows.find((r) => r.key === key)?.value ?? DEFAULT_SETTINGS[key];
+  return { concurrency: Math.max(1, Math.floor(Number(value('downloads.concurrency'))) || DEFAULT_SETTINGS['downloads.concurrency']), paused: value('downloads.paused') === true };
 };
-let concurrency = await readConcurrency();
+let { concurrency, paused } = await readControls();
 await fs.mkdir(tempDir, { recursive: true });
 for (const name of await fs.readdir(tempDir)) await fs.rm(`${tempDir}/${name}`, { force: true, recursive: true });
 
@@ -54,8 +56,15 @@ const jobs = createJobs({
   publishRetry: (job, delayMs) => publishJson(channel, RETRY_EXCHANGE, QUEUES.download, job, { expiration: String(delayMs) }),
 });
 
-await subscriber.subscribe(CANCEL_CHANNEL);
-subscriber.on('message', (_c, taskId) => jobs.cancel(taskId));
+const maintenance = createYtdlpMaintenance({ redis, logger });
+maintenance.report().catch(() => {});
+setInterval(() => maintenance.report().catch(() => {}), 6 * 3_600_000).unref();
+
+await subscriber.subscribe(CANCEL_CHANNEL, YTDLP_UPDATE_CHANNEL);
+subscriber.on('message', (ch, message) => {
+  if (ch === YTDLP_UPDATE_CHANNEL) maintenance.update().then((s) => logger.info({ version: s.version }, 'yt-dlp update finished'));
+  else jobs.cancel(message);
+});
 
 function consume(ch, queue, schema, handler) {
   return ch.consume(queue, async (msg) => {
@@ -86,7 +95,7 @@ async function connect(attempt = 0) {
     await ch.prefetch(concurrency);
     channel = ch;
     tags.length = 0;
-    tags.push((await consume(ch, QUEUES.download, downloadJobSchema, jobs.download)).consumerTag);
+    tags.push(paused ? null : (await consume(ch, QUEUES.download, downloadJobSchema, jobs.download)).consumerTag);
     tags.push((await consume(ch, QUEUES.playlist, playlistJobSchema, jobs.playlist)).consumerTag);
     conn.on('error', (err) => logger.error({ err }, 'rabbitmq error'));
     conn.on('close', () => {
@@ -101,19 +110,21 @@ async function connect(attempt = 0) {
 }
 await connect();
 
-// Prefetch only applies to new consumers, so a changed setting re-subscribes the download queue
+// Prefetch only applies to new consumers, so a changed setting re-subscribes the download queue;
+// pausing stops taking new jobs while running ones finish
 setInterval(async () => {
-  const next = await readConcurrency();
-  if (next === concurrency || !channel || draining) return;
+  const next = await readControls();
+  if ((next.concurrency === concurrency && next.paused === paused) || !channel || draining) return;
   try {
     const ch = channel;
-    await ch.prefetch(next);
-    await ch.cancel(tags[0]);
-    tags[0] = (await consume(ch, QUEUES.download, downloadJobSchema, jobs.download)).consumerTag;
-    concurrency = next;
-    logger.info({ concurrency }, 'download concurrency changed');
+    if (tags[0]) await ch.cancel(tags[0]);
+    tags[0] = null;
+    await ch.prefetch(next.concurrency);
+    if (!next.paused) tags[0] = (await consume(ch, QUEUES.download, downloadJobSchema, jobs.download)).consumerTag;
+    ({ concurrency, paused } = next);
+    logger.info({ concurrency, paused }, 'download controls changed');
   } catch (err) {
-    logger.warn({ err: err.message }, 'could not apply download concurrency');
+    logger.warn({ err: err.message }, 'could not apply download controls');
   }
 }, 15_000).unref();
 
@@ -121,7 +132,7 @@ async function shutdown(signal) {
   if (draining) return;
   draining = true;
   logger.info({ signal, running: jobs.running() }, 'draining');
-  await Promise.allSettled(tags.map((t) => channel?.cancel(t)));
+  await Promise.allSettled(tags.filter(Boolean).map((t) => channel?.cancel(t)));
   const deadline = Date.now() + 120_000;
   while (jobs.running() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 500));
   await Promise.allSettled([channel?.close(), redis.quit(), subscriber.quit(), prisma.$disconnect()]);

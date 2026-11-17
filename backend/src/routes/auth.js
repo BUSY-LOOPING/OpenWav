@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { z } from 'zod';
 import { badRequest, conflict, forbidden, unauthorized } from '../lib/errors.js';
-import { validate } from '../lib/http.js';
+import { uuidParam, validate } from '../lib/http.js';
+import { listSessions } from '../lib/sessions.js';
 
 const password = z.string().min(8).max(128).regex(/[A-Za-z]/, 'Password needs a letter').regex(/\d/, 'Password needs a digit');
 const username = z.string().trim().min(3).max(30).regex(/^[a-zA-Z0-9_-]+$/, 'Username may use letters, numbers, _ and -');
@@ -11,10 +13,13 @@ const email = z.string().trim().toLowerCase().email().max(255);
 export function authRoutes({ prisma, tokens, config, settings, serialize, auth, limits }) {
   const router = Router();
 
-  async function issue(user, res, status = 200) {
+  async function issue(user, req, res, status = 200, previous = null) {
     const refresh = tokens.newRefresh();
-    await prisma.refreshToken.create({ data: { userId: user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt } });
-    res.status(status).json({ data: { user: serialize.user(user), tokens: { accessToken: tokens.signAccess(user), refreshToken: refresh.token } } });
+    const sessionId = previous?.sessionId ?? crypto.randomUUID();
+    await prisma.refreshToken.create({
+      data: { userId: user.id, sessionId, tokenHash: refresh.hash, expiresAt: refresh.expiresAt, userAgent: req.get('user-agent')?.slice(0, 500) ?? previous?.userAgent ?? null, ip: req.ip ?? previous?.ip ?? null },
+    });
+    res.status(status).json({ data: { user: serialize.user(user), tokens: { accessToken: tokens.signAccess(user, sessionId), refreshToken: refresh.token } } });
   }
 
   router.post('/register', limits.auth, validate({ body: z.object({ username, email, password }) }), async (req, res) => {
@@ -25,7 +30,7 @@ export function authRoutes({ prisma, tokens, config, settings, serialize, auth, 
     }
     const passwordHash = await bcrypt.hash(req.body.password, config.BCRYPT_ROUNDS);
     const user = await prisma.user.create({ data: { username: name, email: mail, passwordHash, role: (await prisma.user.count()) === 0 ? 'admin' : 'user' } });
-    await issue(user, res, 201);
+    await issue(user, req, res, 201);
   });
 
   router.post('/login', limits.auth, validate({ body: z.object({ email, password: z.string().min(1).max(128) }) }), async (req, res) => {
@@ -34,7 +39,7 @@ export function authRoutes({ prisma, tokens, config, settings, serialize, auth, 
     if (!ok) throw unauthorized('Invalid email or password');
     if (!user.isActive) throw forbidden('Account is disabled');
     await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
-    await issue(user, res);
+    await issue(user, req, res);
   });
 
   router.post('/refresh', limits.auth, validate({ body: z.object({ refreshToken: z.string().min(1).max(200) }) }), async (req, res) => {
@@ -47,7 +52,7 @@ export function authRoutes({ prisma, tokens, config, settings, serialize, auth, 
     }
     if (!stored.user.isActive) throw forbidden('Account is disabled');
     await prisma.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
-    await issue(stored.user, res);
+    await issue(stored.user, req, res, 200, stored);
   });
 
   router.post('/logout', validate({ body: z.object({ refreshToken: z.string().max(200).optional() }) }), async (req, res) => {
@@ -58,6 +63,15 @@ export function authRoutes({ prisma, tokens, config, settings, serialize, auth, 
   });
 
   router.get('/me', auth.authenticate, (req, res) => res.json({ data: serialize.user(req.user) }));
+
+  router.get('/sessions', auth.authenticate, async (req, res) => {
+    res.json({ data: await listSessions(prisma, req.user.id, req.sessionId) });
+  });
+
+  router.delete('/sessions/:id', auth.authenticate, validate({ params: uuidParam }), async (req, res) => {
+    await prisma.refreshToken.updateMany({ where: { userId: req.user.id, sessionId: req.params.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    res.status(204).end();
+  });
 
   router.patch(
     '/me',

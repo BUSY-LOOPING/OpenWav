@@ -4,7 +4,8 @@ import { AlbumCard, ArtistCard, Card, PlaylistCard } from '../components/Card';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
 import { YoutubeRow } from '../components/YoutubeRow';
 import { subtitleOf, useImport, usePlayResult, ytFallback } from '../components/youtubeResult';
-import { Button, Chips, Icon, Status, Thumb } from '../components/ui';
+import { Button, Chips, Icon, IconButton, Status, Thumb } from '../components/ui';
+import { useImageColor } from '../lib/color';
 import { track as trackEvent } from '../lib/events';
 import { useSearch } from '../lib/queries';
 import type { OnlineAlbum, OnlineArtist, OnlinePlaylist, OnlineResults, SearchScope, SearchType, YoutubeResult } from '../lib/types';
@@ -24,29 +25,35 @@ function PlayButton({ result }: { result: YoutubeResult }) {
   );
 }
 
-function TopResult({ item, onArtist }: { item: OnlineResults['top']; onArtist: (name: string) => void }) {
+function TopResult({ item, songs, onArtist }: { item: OnlineResults['top']; songs: YoutubeResult[]; onArtist: (name: string) => void }) {
   const runImport = useImport();
   const navigate = useNavigate();
+  const tint = useImageColor(item?.thumbnailUrl);
   if (!item) return null;
   const song = item.type === 'song' || item.type === 'video' ? item : null;
 
   const art =
     item.type === 'artist' ? (
-      <Thumb src={item.thumbnailUrl} icon="person" rounded="rounded-full" className="h-24 w-24 sm:h-28 sm:w-28" />
+      <Thumb src={item.thumbnailUrl} icon="person" rounded="rounded-full" seed={item.name} className="h-28 w-28 shrink-0 sm:h-36 sm:w-36" />
     ) : (
-      <Thumb src={item.thumbnailUrl} fallback={song ? ytFallback(song.videoId) : null} className={`h-24 sm:h-28 ${item.type === 'video' ? 'aspect-video' : 'w-24 sm:w-28'}`} />
+      <Thumb src={item.thumbnailUrl} fallback={song ? ytFallback(song.videoId) : null} seed={item.title} className={`h-28 shrink-0 sm:h-36 ${item.type === 'video' ? 'aspect-video' : 'w-28 sm:w-36'}`} />
     );
   const title = item.type === 'artist' ? item.name : item.title;
   const subtitle = item.type === 'album' ? [item.albumType ?? 'Album', item.artists.join(', '), item.year].filter(Boolean).join(' • ') : item.type === 'artist' ? 'Artist' : subtitleOf(item);
-  const action =
+  const actions =
     item.type === 'artist' ? (
-      <Button onClick={() => onArtist(item.name)}>
-        <Icon name="shuffle" /> Songs
-      </Button>
+      <>
+        <Button onClick={() => onArtist(item.name)}>
+          <Icon name="shuffle" /> Shuffle
+        </Button>
+        <Button variant="secondary" onClick={() => navigate(`/search?q=${encodeURIComponent(item.name)}&type=artists`)}>
+          <Icon name="person" /> Profile
+        </Button>
+      </>
     ) : item.type === 'album' ? (
       item.playlistId ? (
-        <Button onClick={() => navigate(`/youtube/playlist/${item.playlistId}`)}>
-          <Icon name="album" /> View album
+        <Button onClick={() => navigate(`/youtube/playlist/${item.playlistId}?play=1`)}>
+          <Icon name="play_arrow" fill /> Play
         </Button>
       ) : (
         <Button onClick={() => runImport(item.url, item.title)}>
@@ -58,20 +65,29 @@ function TopResult({ item, onArtist }: { item: OnlineResults['top']; onArtist: (
     );
 
   return (
-    <section aria-label="Top result" className="mb-8 flex flex-col gap-4 rounded-xl bg-gradient-to-r from-white/10 to-white/[0.03] p-4 sm:flex-row sm:items-center sm:p-6">
-      {art}
-      <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 text-xl font-bold sm:text-2xl">{title}</p>
-        <p className="mt-1 truncate text-muted">{subtitle}</p>
+    <section
+      aria-label="Top result"
+      className="mb-8 grid overflow-hidden rounded-xl bg-surface lg:grid-cols-2"
+      style={tint ? { background: `linear-gradient(135deg, ${tint} 0%, var(--color-surface) 85%)` } : undefined}
+    >
+      <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-6">
+        {art}
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-2xl font-bold sm:text-3xl">{title}</p>
+          <p className="mt-1 truncate text-muted">{subtitle}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {actions}
+            {item.url && <IconButton icon="open_in_new" label="Open on YouTube" onClick={() => window.open(item.url!, '_blank', 'noopener')} className="h-10 w-10 border border-white/20" />}
+          </div>
+        </div>
       </div>
-      <div className="flex gap-2">
-        {action}
-        {item.url && (
-          <Button variant="secondary" onClick={() => window.open(item.url!, '_blank', 'noopener')}>
-            <Icon name="open_in_new" /> YouTube
-          </Button>
-        )}
-      </div>
+      {!!songs.length && (
+        <div className="border-t border-white/10 p-2 sm:p-3 lg:border-l lg:border-t-0" role="table" aria-label={`Top songs for ${title}`}>
+          {songs.map((r) => (
+            <YoutubeRow key={r.videoId} result={r} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -163,6 +179,7 @@ export default function Search() {
   }, [q]);
 
   const online = data?.online;
+  const shown = new Set([...(online?.topSongs ?? []), ...(online?.top && 'videoId' in online.top ? [online.top] : [])].map((r) => r.videoId));
   const library = data?.library;
   const empty =
     (online && !online.songs.length && !online.videos.length && !online.albums.length && !online.artists.length && !online.playlists.length) ||
@@ -185,10 +202,10 @@ export default function Search() {
 
       {online && (
         <>
-          {type === 'all' && <TopResult item={online.top} onArtist={(name) => set({ q: name, type: 'songs' })} />}
+          {type === 'all' && <TopResult item={online.top} songs={online.topSongs ?? []} onArtist={(name) => set({ q: name, type: 'songs' })} />}
           {!!online.songs.length && (
             <Block title="Songs" onMore={more('songs')}>
-              {take(online.songs, 4).map((r) => (
+              {take(type === 'all' ? online.songs.filter((r) => !shown.has(r.videoId)) : online.songs, 4).map((r) => (
                 <YoutubeRow key={r.videoId} result={r} />
               ))}
             </Block>

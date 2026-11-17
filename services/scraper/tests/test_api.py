@@ -68,6 +68,14 @@ class FakeRedis:
     async def set(self, key, value, ex=None):
         self.store[key] = value
 
+    async def delete(self, key):
+        self.store.pop(key, None)
+
+    async def scan_iter(self, match=None, count=None):
+        for key in list(self.store):
+            if match is None or key.startswith(match.rstrip("*")):
+                yield key
+
 
 def fake_ytdlp(tmp_path, payload, exit_code=0):
     script = tmp_path / "yt-dlp"
@@ -272,3 +280,27 @@ def test_playlist_lists_tracks_without_downloading_and_caches():
 def test_playlist_validates_id_and_reports_upstream_failure():
     assert client_for(FakeYTMusic()).get("/playlist", params={"id": "bad id!"}).status_code == 422
     assert client_for(FakeYTMusic(error=RuntimeError("gone"))).get("/playlist", params={"id": "PL1234567890"}).status_code == 502
+
+
+def test_applies_admin_config_from_redis_and_reports_it():
+    redis = FakeRedis()
+    redis.store["scraper:config"] = json.dumps({"cacheTtlSec": 60, "timeoutSec": 3, "maxConcurrency": 7, "retries": 0})
+    client = client_for(FakeYTMusic(), redis=redis)
+    stats = client.get("/stats").json()
+    assert stats["config"] == {"cacheTtlSec": 60, "timeoutSec": 3.0, "maxConcurrency": 7, "retries": 0}
+
+
+def test_fresh_bypasses_cache_and_clear_keeps_config():
+    yt = FakeYTMusic()
+    redis = FakeRedis()
+    redis.store["scraper:config"] = json.dumps({"cacheTtlSec": 60})
+    client = client_for(yt, redis=redis)
+    client.get("/search", params={"q": "x"})
+    client.get("/search", params={"q": "x"})
+    assert len([c for c in yt.calls if c[0] == "search"]) == 1
+    client.get("/search", params={"q": "x", "fresh": "1"})
+    assert len([c for c in yt.calls if c[0] == "search"]) == 2
+    assert client.get("/stats").json()["cache"] == {"entries": 1, "hits": 1, "misses": 2}
+    assert client.delete("/cache").json()["cleared"] >= 2
+    assert "scraper:config" in redis.store
+    assert [k for k in redis.store if k != "scraper:config"] == []

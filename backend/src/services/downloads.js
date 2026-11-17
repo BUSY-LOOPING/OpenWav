@@ -1,5 +1,5 @@
-import { DAILY_LIMIT_MESSAGE, EXCHANGE, QUEUES, STORAGE_LIMIT_MESSAGE, TASK_STATUS, TERMINAL_TASK_STATUSES, dailyQuotaWhere, isAllowedDomain, isPlaylistUrl, overStorage, publishJson, storageUsage } from '@openwav/shared';
-import { AppError, badRequest, unavailable } from '../lib/errors.js';
+import { DAILY_LIMIT_MESSAGE, EXCHANGE, QUEUES, STORAGE_LIMIT_MESSAGE, TASK_STATUS, TERMINAL_TASK_STATUSES, cappedQuality, dailyQuotaWhere, isAllowedDomain, isPlaylistUrl, overStorage, publishJson, storageUsage } from '@openwav/shared';
+import { AppError, badRequest, forbidden, unavailable } from '../lib/errors.js';
 
 const YT_HOSTS = /(^|\.)(youtube\.com|youtu\.be|music\.youtube\.com)$/;
 
@@ -26,10 +26,11 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
     return s;
   }
 
-  async function checkQuota(userId, s) {
-    if (!userId) return;
+  async function checkQuota(user, s) {
+    if (!user) return;
+    const userId = user.id;
     const used = await prisma.downloadTask.count({ where: dailyQuotaWhere(userId) });
-    if (used >= s['downloads.max_per_user_per_day']) throw new AppError(429, 'RATE_LIMITED', DAILY_LIMIT_MESSAGE);
+    if (used >= (user.dailyDownloadLimit ?? s['downloads.max_per_user_per_day'])) throw new AppError(429, 'RATE_LIMITED', DAILY_LIMIT_MESSAGE);
     if (overStorage(await storageUsage(prisma, userId))) throw new AppError(403, 'STORAGE_LIMIT', STORAGE_LIMIT_MESSAGE);
   }
 
@@ -44,10 +45,12 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
 
   async function create({ url: rawUrl, format, quality, userId, playlistId = null, name, isPublic }) {
     const s = await guard(rawUrl);
+    const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { id: true, canDownload: true, dailyDownloadLimit: true, maxQuality: true } }) : null;
     format ??= s['downloads.default_format'];
-    quality ??= s['downloads.default_quality'];
+    quality = cappedQuality(quality ?? s['downloads.default_quality'], user?.maxQuality);
 
     if (isPlaylistUrl(rawUrl)) {
+      if (user && !user.canDownload) throw forbidden('Downloading is turned off for your account');
       const target = playlistId ?? (name !== undefined ? (await playlists.createOwned(userId, { name, isPublic })).id : null);
       const task = await prisma.playlistTask.create({ data: { url: rawUrl, requestedBy: userId, format, quality, targetPlaylistId: target } });
       await publish(QUEUES.playlist, { playlistTaskId: task.id, url: rawUrl, format, quality, userId, playlistId: target }, (err) =>
@@ -68,7 +71,8 @@ export function createDownloadService({ prisma, settings, channel, playlists }) 
     // One download per track per user, so every view of it follows the same task
     const active = !playlistId && userId && (await prisma.downloadTask.findFirst({ where: { requestedBy: userId, url, status: { notIn: TERMINAL_TASK_STATUSES } }, select: { id: true } }));
     if (active) return { type: 'track', taskId: active.id };
-    await checkQuota(userId, s);
+    if (user && !user.canDownload) throw forbidden('Downloading is turned off for your account');
+    await checkQuota(user, s);
 
     const task = await prisma.downloadTask.create({ data: { url, requestedBy: userId, format, quality, targetPlaylistId: playlistId } });
     await publish(QUEUES.download, { taskId: task.id, url, format, quality, userId, playlistTaskId: null, playlistId, position: null }, (err) =>

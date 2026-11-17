@@ -44,14 +44,16 @@ describe('playlists', () => {
         { url: 'https://www.youtube.com/watch?v=c', title: 'Third', playlistTaskId: job.id, position: 3, status: 'failed', errorMessage: 'Storage limit reached' },
       ],
     });
-    const mine = await items(id, owner);
+    const mine = await items(id, owner, '&sort=position');
     expect(mine.map((i) => [i.position, i.track?.id ?? null, i.pending?.title ?? null, i.pending?.progress ?? null])).toEqual([
       [1, a.id, null, null],
       [2, null, 'Second', 40],
       [3, null, 'Third', 0],
     ]);
     expect(mine[2].pending).toMatchObject({ status: 'failed', reason: 'storage_limit', url: 'https://www.youtube.com/watch?v=c' });
-    expect((await items(id, other)).map((i) => i.track.id)).toEqual([a.id]);
+    expect((await items(id, other, '&sort=position')).map((i) => i.track.id)).toEqual([a.id]);
+    expect((await items(id, owner, '&pending=true')).map((i) => i.pending.title)).toEqual(['Second', 'Third']);
+    expect((await items(id, owner)).map((i) => i.track.id)).toEqual([a.id]);
 
     const summary = (await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data;
     expect(summary).not.toHaveProperty('tracks');
@@ -77,15 +79,31 @@ describe('playlists', () => {
       expect((await ctx.request.post(`/api/v1/playlists/${id}/tracks`).set(bearer(ctx.deps, owner)).send({ mediaId: t.id })).status).toBe(201);
     }
     expect((await ctx.request.delete(`/api/v1/playlists/${id}/tracks/${b.id}`).set(bearer(ctx.deps, owner))).status).toBe(204);
-    expect((await items(id, owner)).map((i) => [i.track.id, i.position])).toEqual([[a.id, 1], [c.id, 2]]);
+    expect((await items(id, owner, '&sort=position')).map((i) => [i.track.id, i.position])).toEqual([[a.id, 1], [c.id, 2]]);
     expect((await ctx.request.get(`/api/v1/playlists/${id}`).set(bearer(ctx.deps, owner))).body.data).toMatchObject({ trackCount: 2, durationSec: 400 });
 
     await ctx.request.post(`/api/v1/playlists/${id}/tracks`).set(bearer(ctx.deps, owner)).send({ mediaId: b.id }).expect(201);
     const move = (mediaId, position) => ctx.request.put(`/api/v1/playlists/${id}/tracks/${mediaId}/position`).set(bearer(ctx.deps, owner)).send({ position });
     await move(b.id, 1).expect(204);
-    expect((await items(id, owner)).map((i) => [i.track.id, i.position])).toEqual([[b.id, 1], [a.id, 2], [c.id, 3]]);
+    expect((await items(id, owner, '&sort=position')).map((i) => [i.track.id, i.position])).toEqual([[b.id, 1], [a.id, 2], [c.id, 3]]);
     await move(b.id, 3).expect(204);
-    expect((await items(id, owner)).map((i) => [i.track.id, i.position])).toEqual([[a.id, 1], [c.id, 2], [b.id, 3]]);
+    expect((await items(id, owner, '&sort=position')).map((i) => [i.track.id, i.position])).toEqual([[a.id, 1], [c.id, 2], [b.id, 3]]);
+  });
+
+  it('sorts by most recently added by default, or oldest, or title', async () => {
+    const { id } = (await create()).body.data;
+    await prisma.media.update({ where: { id: a.id }, data: { title: 'Zebra' } });
+    await prisma.media.update({ where: { id: b.id }, data: { title: 'Apple' } });
+    await prisma.media.update({ where: { id: c.id }, data: { title: 'Mango' } });
+    for (const [i, t] of [a, b, c].entries()) {
+      await prisma.playlistTrack.create({ data: { playlistId: id, mediaId: t.id, position: i + 1, addedAt: new Date(Date.UTC(2026, 0, i + 1)) } });
+    }
+    const ids = async (sort) => (await items(id, owner, sort ? `&sort=${sort}` : '')).map((i) => i.track.id);
+    expect(await ids()).toEqual([c.id, b.id, a.id]);
+    expect(await ids('oldest')).toEqual([a.id, b.id, c.id]);
+    expect(await ids('title')).toEqual([b.id, c.id, a.id]);
+    expect(await ids('title_desc')).toEqual([a.id, c.id, b.id]);
+    expect((await ctx.request.get(`/api/v1/playlists/${id}/items?sort=bogus`)).status).toBe(400);
     expect((await ctx.request.put(`/api/v1/playlists/${id}/tracks/${b.id}/position`).set(bearer(ctx.deps, other)).send({ position: 1 })).status).toBe(403);
   });
 

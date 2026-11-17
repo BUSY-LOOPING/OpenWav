@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useStore } from 'react-redux';
+import { attachEqualizer } from '../lib/equalizer';
 import { track as trackEvent } from '../lib/events';
 import { getStreamUrl, msUntilRefresh } from '../lib/stream';
 import { cycleRepeat, ended, next, prev, seek, setDuration, setPlaying, setPosition, toggleMute, togglePlay } from '../store/player';
@@ -59,7 +60,9 @@ export function AudioEngine({ onHelp }: { onHelp: () => void }) {
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('play', onPlay);
     audio.addEventListener('pause', onPause);
+    const detachEqualizer = attachEqualizer(audio);
     return () => {
+      detachEqualizer();
       audio.pause();
       audio.removeAttribute('src');
       audio.removeEventListener('timeupdate', onTime);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertTopology,
+  cappedQuality,
   buildProgressEvent,
   retryDelayMs,
   downloadJobSchema,
@@ -56,6 +57,14 @@ describe('buildProgressEvent', () => {
 describe('trackingEventSchema', () => {
   it('rejects unknown event types', () => {
     expect(trackingEventSchema.safeParse({ type: 'hack' }).success).toBe(false);
+  });
+});
+
+describe('cappedQuality', () => {
+  it('lowers a request above the cap and leaves the rest', () => {
+    expect(cappedQuality('320k', '128k')).toBe('128k');
+    expect(cappedQuality('96k', '128k')).toBe('96k');
+    expect(cappedQuality('320k', null)).toBe('320k');
   });
 });
 

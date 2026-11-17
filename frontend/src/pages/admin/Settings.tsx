@@ -44,7 +44,12 @@ const GROUPS: { id: string; title: string; fields: Field[] }[] = [
   {
     id: 'storage',
     title: 'Storage',
-    fields: [{ key: 'storage.default_user_quota_gb', label: 'Default storage per user (GB)', type: 'number', min: 0, step: 0.5, hint: '0 = unlimited. Override per user on the Users page' }],
+    fields: [
+      { key: 'storage.default_user_quota_gb', label: 'Default storage per user (GB)', type: 'number', min: 0, step: 0.5, hint: '0 = unlimited. Override per user on the Users page' },
+      { key: 'storage.cleanup_enabled', label: 'Remove unused tracks daily', type: 'boolean' },
+      { key: 'storage.cleanup_unplayed_days', label: 'Unused for (days)', type: 'number', min: 7, hint: 'Never liked, in no playlist and not played in this many days' },
+      { key: 'analytics.retention_days', label: 'Keep play history for analytics (days)', type: 'number', min: 7 },
+    ],
   },
   { id: 'auth', title: 'Accounts', fields: [{ key: 'auth.registration_enabled', label: 'Allow new registrations', type: 'boolean' }] },
   {

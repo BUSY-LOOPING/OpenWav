@@ -29,6 +29,11 @@ const Recommender = lazy(() => import('./pages/admin/Recommender'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 const Traces = lazy(() => import('./pages/admin/Traces'));
 const Logs = lazy(() => import('./pages/admin/Logs'));
+const AdminStorage = lazy(() => import('./pages/admin/Storage'));
+const Jobs = lazy(() => import('./pages/admin/Jobs'));
+const Analytics = lazy(() => import('./pages/admin/Analytics'));
+const Audit = lazy(() => import('./pages/admin/Audit'));
+const Scraper = lazy(() => import('./pages/admin/Scraper'));
 
 const loading = <Spinner className="mx-auto mt-24" />;
 
@@ -94,6 +99,11 @@ export default function App() {
             <Route path="media" element={<Media />} />
             <Route path="discovery" element={<Discovery />} />
             <Route path="recommender" element={<Recommender />} />
+            <Route path="storage" element={<AdminStorage />} />
+            <Route path="jobs" element={<Jobs />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="audit" element={<Audit />} />
+            <Route path="scraper" element={<Scraper />} />
             <Route path="traces" element={<Traces />} />
             <Route path="logs" element={<Logs />} />
             <Route path="settings" element={<AdminSettings />} />

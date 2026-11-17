@@ -57,11 +57,12 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
 
   async function quotaLeft(userId) {
     if (!userId) return Infinity;
-    const [row, used] = await Promise.all([
+    const [row, user, used] = await Promise.all([
       prisma.setting.findUnique({ where: { key: 'downloads.max_per_user_per_day' } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { dailyDownloadLimit: true } }),
       prisma.downloadTask.count({ where: dailyQuotaWhere(userId) }),
     ]);
-    return (row?.value ?? DEFAULT_SETTINGS['downloads.max_per_user_per_day']) - used;
+    return (user?.dailyDownloadLimit ?? row?.value ?? DEFAULT_SETTINGS['downloads.max_per_user_per_day']) - used;
   }
 
   async function finishPlaylistTask(playlistTaskId) {

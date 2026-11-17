@@ -24,11 +24,11 @@ export function Card({ title, subtitle, images, href, circle, onPlay, menu, icon
     images.length >= 4 ? (
       <div className="grid h-full w-full grid-cols-2">
         {images.slice(0, 4).map((src, i) => (
-          <Thumb key={i} src={src} rounded="" className="h-full w-full" icon={icon} />
+          <Thumb key={i} src={src} seed={`${title}${i}`} rounded="" className="h-full w-full" icon={icon} />
         ))}
       </div>
     ) : (
-      <Thumb src={images[0]} rounded="" className="h-full w-full" icon={icon} />
+      <Thumb src={images[0]} seed={title} rounded="" className="h-full w-full" icon={icon} />
     );
 
   return (

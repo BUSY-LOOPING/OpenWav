@@ -16,7 +16,7 @@ export function createTokens(config) {
 
   return {
     hash: sha256,
-    signAccess: (user) => jwt.sign({ sub: user.id, role: user.role }, config.JWT_SECRET, { expiresIn: config.JWT_ACCESS_TTL, audience: 'access' }),
+    signAccess: (user, sid) => jwt.sign({ sub: user.id, role: user.role, ...(sid ? { sid } : {}) }, config.JWT_SECRET, { expiresIn: config.JWT_ACCESS_TTL, audience: 'access' }),
     verifyAccess: (token) => verify(token, config.JWT_SECRET, 'access'),
     newRefresh: () => {
       const token = crypto.randomBytes(48).toString('base64url');

@@ -16,6 +16,7 @@ export function createEventService({ prisma, settings, producer, logger, random 
           update: { playCount: { increment: 1 }, playedAt: new Date(), completed: false },
         }),
         prisma.media.update({ where: { id: e.mediaId }, data: { playCount: { increment: 1 } } }),
+        prisma.playEvent.create({ data: { userId, mediaId: e.mediaId } }),
       ]);
     } else if (e.type === 'play_progress') {
       await prisma.userHistory.updateMany({ where: { userId, mediaId: e.mediaId }, data: { lastPosition: position, watchTime: { increment: 30 } } });

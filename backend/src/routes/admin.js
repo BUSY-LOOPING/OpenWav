@@ -1,5 +1,5 @@
 import { HeadBucketCommand } from '@aws-sdk/client-s3';
-import { CANCEL_CHANNEL, TASK_STATUS, TERMINAL_TASK_STATUSES } from '@openwav/shared';
+import { AUDIO_QUALITIES, CANCEL_CHANNEL, SCRAPER_CONFIG_KEY, TASK_STATUS, TERMINAL_TASK_STATUSES, scraperConfig } from '@openwav/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 import { badRequest, notFound, unavailable } from '../lib/errors.js';
@@ -45,7 +45,7 @@ export function opsCheck({ prisma, tokens }) {
 }
 
 export function adminRoutes(deps) {
-  const { prisma, redis, auth, tokens, serialize, downloads, settings, storage, config, monitoring, recommender, scraper, channel, producerReady } = deps;
+  const { prisma, redis, auth, tokens, serialize, downloads, settings, storage, config, monitoring, recommender, scraper, channel, producerReady, audit } = deps;
   const router = Router();
   router.use(auth.authenticate, auth.requireAdmin);
 
@@ -130,7 +130,8 @@ export function adminRoutes(deps) {
     const data = await monitoring.server().catch(() => {
       throw unavailable('Server metrics are unavailable, check that Prometheus and node-exporter are running');
     });
-    res.json({ data });
+    if (data.cpu.cores === null && !data.disks.length) throw unavailable('Prometheus has no node-exporter data yet. Reload Prometheus so it picks up the node scrape job.');
+    res.json({ data: { ...data, coldStorageDir: config.COLD_STORAGE_DIR || null } });
   });
 
   const service = z.string().regex(/^[\w-]{1,50}$/).optional();
@@ -178,24 +179,28 @@ export function adminRoutes(deps) {
         lastSeen: u.lastSeen,
         stats: u._count,
         storage: { usedBytes: used.get(u.id) ?? 0, quotaBytes: quotaOf(u), custom: u.storageQuotaBytes !== null },
+        permissions: { canDownload: u.canDownload, dailyDownloadLimit: u.dailyDownloadLimit, maxQuality: u.maxQuality },
       })),
       nextCursor,
     });
   });
 
-  router.patch('/users/:id', validate({ params: uuidParam, body: z.object({ role: z.enum(['user', 'admin']).optional(), isActive: z.boolean().optional(), storageQuotaBytes: z.number().int().min(0).nullable().optional() }) }), async (req, res) => {
+  router.patch('/users/:id', validate({ params: uuidParam, body: z.object({ role: z.enum(['user', 'admin']).optional(), isActive: z.boolean().optional(), storageQuotaBytes: z.number().int().min(0).nullable().optional(), canDownload: z.boolean().optional(), dailyDownloadLimit: z.number().int().min(0).max(100_000).nullable().optional(), maxQuality: z.enum(AUDIO_QUALITIES).nullable().optional() }) }), async (req, res) => {
     if (req.params.id === req.user.id && (req.body.role === 'user' || req.body.isActive === false)) throw badRequest('You cannot demote or ban yourself');
     const user = await prisma.user.update({ where: { id: req.params.id }, data: req.body }).catch(() => {
       throw notFound('User');
     });
     if (req.body.isActive === false) await prisma.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await audit(req, 'user.update', { type: 'user', id: user.id, details: { username: user.username, ...req.body } });
     res.json({ data: { ...serialize.user(user), isActive: user.isActive } });
   });
 
   router.delete('/users/:id', validate({ params: uuidParam }), async (req, res) => {
     if (req.params.id === req.user.id) throw badRequest('You cannot delete yourself');
+    const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { username: true } });
     const { count } = await prisma.user.deleteMany({ where: { id: req.params.id } });
     if (!count) throw notFound('User');
+    await audit(req, 'user.delete', { type: 'user', id: req.params.id, details: { username: target?.username } });
     res.status(204).end();
   });
 
@@ -232,12 +237,14 @@ export function adminRoutes(deps) {
   router.post('/downloads/:id/cancel', validate({ params: uuidParam }), async (req, res) => {
     await taskById(req.params.id);
     await cancel([req.params.id]);
+    await audit(req, 'download.cancel', { type: 'download', id: req.params.id });
     res.json({ data: await taskById(req.params.id) });
   });
 
   router.post('/downloads/:id/retry', validate({ params: uuidParam }), async (req, res) => {
     await taskById(req.params.id);
     if (!(await retry([req.params.id]))) throw badRequest('Only failed or cancelled downloads can be retried');
+    await audit(req, 'download.retry', { type: 'download', id: req.params.id });
     res.json({ data: await taskById(req.params.id) });
   });
 
@@ -249,6 +256,7 @@ export function adminRoutes(deps) {
         : action === 'retry'
           ? await retry(ids)
           : (await prisma.downloadTask.deleteMany({ where: { id: { in: ids }, status: { in: TERMINAL_TASK_STATUSES } } })).count;
+    await audit(req, `download.bulk_${action}`, { type: 'download', details: { count: ids.length, affected } });
     res.json({ data: { affected } });
   });
 
@@ -282,21 +290,26 @@ export function adminRoutes(deps) {
         }
       }
     });
+    await audit(req, 'media.update', { type: 'media', id: req.params.id, details: req.body });
     res.json({ data: serialize.track(await prisma.media.findUnique({ where: { id: req.params.id }, include: trackInclude() })) });
   });
 
   router.delete('/media/:id', validate({ params: uuidParam }), async (req, res) => {
-    const media = await prisma.media.findUnique({ where: { id: req.params.id }, select: { id: true, filePath: true, thumbnailPath: true } });
+    const media = await prisma.media.findUnique({ where: { id: req.params.id }, select: { id: true, title: true, filePath: true, thumbnailPath: true } });
     if (!media) throw notFound('Track');
     await deleteMediaObjects({ storage, config }, media);
     await prisma.media.delete({ where: { id: media.id } });
+    await audit(req, 'media.delete', { type: 'media', id: media.id, details: { title: media.title } });
     res.status(204).end();
   });
 
   router.get('/settings', async (_req, res) => res.json({ data: await settings.all() }));
 
   router.patch('/settings', validate({ body: z.record(z.string(), z.json()) }), async (req, res) => {
-    res.json({ data: await settings.update(req.body, req.user.id) });
+    const updated = await settings.update(req.body, req.user.id);
+    if (Object.keys(req.body).some((k) => k.startsWith('scraper.'))) await redis.set(SCRAPER_CONFIG_KEY, JSON.stringify(scraperConfig(updated)));
+    await audit(req, 'settings.update', { type: 'settings', details: req.body });
+    res.json({ data: updated });
   });
 
   router.get('/discovery', async (_req, res) => {
@@ -322,6 +335,7 @@ export function adminRoutes(deps) {
   router.post('/discovery/run', async (req, res) => {
     const value = new Date().toISOString();
     await prisma.setting.upsert({ where: { key: 'discovery.run_requested_at' }, create: { key: 'discovery.run_requested_at', value, updatedBy: req.user.id }, update: { value, updatedBy: req.user.id } });
+    await audit(req, 'discovery.run');
     res.status(202).json({ data: { requestedAt: value } });
   });
 
@@ -338,11 +352,13 @@ export function adminRoutes(deps) {
     const value = parseCookies(req.body.content);
     if (!value.domains.some((d) => d.endsWith('youtube.com'))) throw badRequest('No youtube.com cookies found. Export a Netscape cookies.txt while signed in to YouTube.');
     const row = await prisma.setting.upsert({ where: { key: 'ytdlp.cookies' }, create: { key: 'ytdlp.cookies', value, updatedBy: req.user.id }, update: { value, updatedBy: req.user.id } });
+    await audit(req, 'ytdlp.cookies_set', { details: { entries: value.entries, domains: value.domains } });
     res.json({ data: cookieStatus(row) });
   });
 
-  router.delete('/ytdlp/cookies', async (_req, res) => {
+  router.delete('/ytdlp/cookies', async (req, res) => {
     await prisma.setting.deleteMany({ where: { key: 'ytdlp.cookies' } });
+    await audit(req, 'ytdlp.cookies_removed');
     res.status(204).end();
   });
 
@@ -353,8 +369,9 @@ export function adminRoutes(deps) {
     res.json({ data });
   });
 
-  router.post('/recommender/retrain', async (_req, res) => {
+  router.post('/recommender/retrain', async (req, res) => {
     await recommender.retrain();
+    await audit(req, 'recommender.retrain');
     res.status(202).json({ data: { queued: true } });
   });
 

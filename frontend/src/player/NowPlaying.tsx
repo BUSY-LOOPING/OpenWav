@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SeekBar, TransportControls } from './PlayerBar';
+import { EqualizerDialog } from '../components/EqualizerDialog';
 import { TrackMenu } from '../components/TrackMenu';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
 import { YoutubeRow } from '../components/YoutubeRow';
@@ -122,6 +123,7 @@ export function NowPlaying() {
   const [tab, setTab] = useState<Tab>('upnext');
   const touchStart = useRef<number | null>(null);
   const [dragY, setDragY] = useState(0);
+  const [eqOpen, setEqOpen] = useState(false);
   const [visible, setVisible] = useState(open);
   const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 
@@ -160,8 +162,12 @@ export function NowPlaying() {
       >
         <IconButton icon="keyboard_arrow_down" label="Close now playing" onClick={close} size={32} />
         <div className="h-1 w-10 rounded-full bg-white/30 md:hidden" />
-        <TrackMenu track={track} />
+        <span className="flex">
+          <IconButton icon="equalizer" label="Equaliser" onClick={() => setEqOpen(true)} />
+          <TrackMenu track={track} />
+        </span>
       </div>
+      {eqOpen && <EqualizerDialog onClose={() => setEqOpen(false)} />}
       <IconButton icon="keyboard_arrow_down" label="Collapse now playing" onClick={close} size={32} className="absolute left-3 top-3 z-20 hidden md:inline-flex" />
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-6 md:flex-row md:gap-12 md:overflow-hidden md:px-12 md:pt-10">
         <div className="flex flex-col items-center justify-center gap-6 md:flex-1">

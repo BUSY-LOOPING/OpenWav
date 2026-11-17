@@ -46,18 +46,21 @@ enum PlaylistTaskStatus {
 }
 
 model User {
-  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  username          String    @unique @db.VarChar(50)
-  email             String    @unique @db.VarChar(255)
-  passwordHash      String    @map("password_hash") @db.VarChar(255)
-  role              Role      @default(user)
-  isActive          Boolean   @default(true) @map("is_active")
-  emailVerified     Boolean   @default(false) @map("email_verified")
-  lastLogin         DateTime? @map("last_login") @db.Timestamptz(6)
-  lastSeen          DateTime? @map("last_seen") @db.Timestamptz(6)
-  storageQuotaBytes BigInt?   @map("storage_quota_bytes")
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  username           String    @unique @db.VarChar(50)
+  email              String    @unique @db.VarChar(255)
+  passwordHash       String    @map("password_hash") @db.VarChar(255)
+  role               Role      @default(user)
+  isActive           Boolean   @default(true) @map("is_active")
+  emailVerified      Boolean   @default(false) @map("email_verified")
+  lastLogin          DateTime? @map("last_login") @db.Timestamptz(6)
+  lastSeen           DateTime? @map("last_seen") @db.Timestamptz(6)
+  storageQuotaBytes  BigInt?   @map("storage_quota_bytes")
+  canDownload        Boolean   @default(true) @map("can_download")
+  dailyDownloadLimit Int?      @map("daily_download_limit")
+  maxQuality         String?   @map("max_quality") @db.VarChar(10)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   settings       UserSetting[]
   uploads        Media[]
@@ -70,6 +73,8 @@ model User {
   playlistTasks  PlaylistTask[]
   savedPlaylists PlaylistSave[]
   subscriptions  ArtistSubscription[]
+  auditLogs      AuditLog[]
+  playEvents     PlayEvent[]
 
   @@index([role])
   @@index([lastSeen])
@@ -79,6 +84,9 @@ model User {
 model RefreshToken {
   id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
+  sessionId String    @default(dbgenerated("uuid_generate_v4()")) @map("session_id") @db.Uuid
+  userAgent String?   @map("user_agent") @db.VarChar(500)
+  ip        String?   @db.VarChar(64)
   tokenHash String    @unique @map("token_hash") @db.VarChar(255)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -86,6 +94,7 @@ model RefreshToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([sessionId])
   @@index([expiresAt])
   @@map("refresh_tokens")
 }
@@ -135,6 +144,7 @@ model Media {
   likes         Like[]
   downloadTasks DownloadTask[]
   playlistItems PlaylistTrack[]
+  plays         PlayEvent[]
   artists       MediaArtist[]
   albums        MediaAlbum[]
 
@@ -351,4 +361,43 @@ model ArtistSubscription {
 
   @@id([userId, artistId])
   @@map("artist_subscriptions")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  targetType String?  @map("target_type") @db.VarChar(50)
+  targetId   String?  @map("target_id") @db.VarChar(200)
+  details    Json?
+  ip         String?  @db.VarChar(64)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model PlayEvent {
+  id       String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  mediaId  String   @map("media_id") @db.Uuid
+  playedAt DateTime @default(now()) @map("played_at") @db.Timestamptz(6)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media    Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([playedAt])
+  @@index([mediaId])
+  @@map("play_events")
+}
+
+model SearchMiss {
+  term  String   @db.VarChar(200)
+  day   DateTime @db.Date
+  count Int      @default(1)
+
+  @@id([term, day])
+  @@index([day])
+  @@map("search_misses")
 }
