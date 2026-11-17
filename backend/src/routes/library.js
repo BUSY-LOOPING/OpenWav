@@ -32,32 +32,42 @@ export function libraryRoutes({ prisma, auth, serialize }) {
     res.json({ data: items.map((h) => ({ ...serialize.track(h.media), playedAt: h.playedAt })), nextCursor });
   });
 
-  router.get('/playlists', async (req, res) => {
+  router.get('/playlists', validate({ query: pageQuery }), async (req, res) => {
+    const { cursor, limit } = req.query;
     const userId = req.user.id;
-    const [owned, saved] = await Promise.all([
-      prisma.playlist.findMany({ where: { createdBy: userId }, orderBy: { updatedAt: 'desc' }, include: playlistInclude(userId) }),
-      prisma.playlist.findMany({ where: { saves: { some: { userId } }, OR: [{ isPublic: true }, { createdBy: userId }] }, orderBy: { updatedAt: 'desc' }, include: playlistInclude(userId) }),
-    ]);
-    res.json({ data: [...owned, ...saved.filter((p) => p.createdBy !== userId)].map((p) => serialize.playlist(p, userId)) });
+    const rows = await prisma.playlist.findMany({
+      where: { AND: [{ OR: [{ createdBy: userId }, { saves: { some: { userId } }, isPublic: true }] }, cursorWhere(cursor, 'updatedAt')] },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: playlistInclude(userId),
+    });
+    const { items, nextCursor } = page(rows, limit, 'updatedAt');
+    res.json({ data: items.map((p) => serialize.playlist(p, userId)), nextCursor });
   });
 
-  router.get('/artists', async (req, res) => {
+  router.get('/artists', validate({ query: pageQuery }), async (req, res) => {
+    const { cursor, limit } = req.query;
     const userId = req.user.id;
-    const artists = await prisma.artist.findMany({
-      where: { subscribers: { some: { userId } } },
-      orderBy: { name: 'asc' },
+    const rows = await prisma.artist.findMany({
+      where: { subscribers: { some: { userId } }, ...cursorWhere(cursor, 'name', 'asc') },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
       include: { subscribers: { where: { userId } }, _count: { select: { subscribers: true } } },
     });
-    res.json({ data: artists.map((a) => serialize.artist(a, userId)) });
+    const { items, nextCursor } = page(rows, limit, 'name');
+    res.json({ data: items.map((a) => serialize.artist(a, userId)), nextCursor });
   });
 
-  router.get('/albums', async (req, res) => {
-    const albums = await prisma.album.findMany({
-      where: { media: { some: { media: { likes: { some: { userId: req.user.id } } } } } },
-      orderBy: { name: 'asc' },
+  router.get('/albums', validate({ query: pageQuery }), async (req, res) => {
+    const { cursor, limit } = req.query;
+    const rows = await prisma.album.findMany({
+      where: { media: { some: { media: { likes: { some: { userId: req.user.id } } } } }, ...cursorWhere(cursor, 'name', 'asc') },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
       include: { media: { take: 1, include: { media: { select: { thumbnailPath: true, artists: { include: { artist: true } } } } } } },
     });
-    res.json({ data: albums.map(serialize.album) });
+    const { items, nextCursor } = page(rows, limit, 'name');
+    res.json({ data: items.map(serialize.album), nextCursor });
   });
 
   return router;

@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CollectionHeader, PlayButtons } from '../components/CollectionHeader';
+import { CollectionHeader, CollectionLayout, PlayButtons } from '../components/CollectionHeader';
 import { Dialog } from '../components/Dialog';
 import { Menu } from '../components/Menu';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
+import { YoutubeRow } from '../components/YoutubeRow';
 import { toast } from '../lib/toast';
-import { Button, Icon, IconButton, Status, Thumb, inputClass } from '../components/ui';
+import { Button, Icon, IconButton, LoadMore, Status, inputClass } from '../components/ui';
 import { errorMessage } from '../lib/api';
-import { formatDuration, formatTime } from '../lib/format';
-import { useTaskProgress } from '../lib/progress';
-import { useOnlinePlaylist, usePlaylist, usePlaylistMutations } from '../lib/queries';
-import type { PlaylistDetail, PlaylistImport, PlaylistTrack, YoutubeResult } from '../lib/types';
-import { playTracks } from '../store/player';
+import { formatDuration } from '../lib/format';
+import { flat, loadPlaylistTracks, usePlayCollection, usePlaylist, usePlaylistItems, usePlaylistMutations } from '../lib/queries';
+import type { PendingTrack, PlaylistDetail, PlaylistImport, PlaylistTrack, Task, YoutubeResult } from '../lib/types';
+import { hydrated, videoIdOf } from '../store/downloads';
 import { useAppDispatch } from '../store';
 
 function EditDialog({ playlist, onClose }: { playlist: PlaylistDetail; onClose: () => void }) {
@@ -60,60 +60,26 @@ function EditDialog({ playlist, onClose }: { playlist: PlaylistDetail; onClose: 
   );
 }
 
-type ImportTask = PlaylistImport['tasks'][number];
+const REASON: Record<string, string> = { daily_limit: 'Daily download limit reached', storage_limit: 'Storage limit reached' };
 
-const videoIdOf = (raw: string) => {
-  const url = new URL(raw);
-  return url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v');
-};
+const asResult = (p: PendingTrack): YoutubeResult => ({
+  type: 'song',
+  videoId: videoIdOf(p.url) ?? p.id,
+  url: p.url,
+  title: p.title ?? 'Loading…',
+  channel: '',
+  thumbnailUrl: null,
+  durationSec: null,
+  downloaded: false,
+  mediaId: null,
+});
 
-// Mirrors TrackRow's slots (drag handle, like, menu) so pending and downloaded rows line up exactly
-function PendingRow({ task, info, draggable }: { task: ImportTask; info?: YoutubeResult; draggable: boolean }) {
-  const videoId = info?.videoId ?? videoIdOf(task.url);
-  const title = info?.title ?? task.title ?? 'Loading…';
-  const failed = task.status === 'failed' || task.status === 'cancelled';
-  const subtitle = failed ? (task.reason === 'daily_limit' ? 'Daily download limit reached' : "Couldn't download") : (info?.artists?.join(', ') ?? info?.channel ?? (task.status === 'queued' ? 'Waiting to download' : 'Downloading'));
-  return (
-    <div role="row" aria-busy={!failed} className="relative flex min-h-14 items-center gap-3 rounded-md px-2 py-1.5 opacity-50 sm:px-3">
-      {draggable && <Icon name="drag_indicator" className="hidden text-white/40 sm:inline-block" />}
-      <Thumb src={info?.thumbnailUrl ?? null} fallback={videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : null} alt="" className="h-10 w-10 shrink-0 sm:h-12 sm:w-12" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{title}</p>
-        <p className={`truncate text-sm ${failed ? 'text-red-300' : 'text-muted'}`}>
-          {subtitle}
-          {info?.album && <span className="lg:hidden"> • {info.album}</span>}
-        </p>
-      </div>
-      <span className="hidden w-1/4 truncate text-sm text-muted lg:block">{info?.album ?? ''}</span>
-      <span className="hidden w-10 shrink-0 sm:block" />
-      <span className="hidden w-12 text-right text-sm text-muted tabular-nums sm:block">{info?.durationSec ? formatTime(info.durationSec) : ''}</span>
-      <span className="w-10 shrink-0" />
-      {!failed && (
-        <div className="absolute inset-x-2 bottom-0 h-0.5 overflow-hidden rounded bg-white/10 sm:inset-x-3" role="progressbar" aria-label={`Downloading ${title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}>
-          <div className="h-full bg-accent transition-all" style={{ width: `${task.progress}%` }} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function useImportTasks(job: PlaylistImport | null) {
-  const tasks = job?.tasks ?? [];
-  const live = useTaskProgress(tasks.map((t) => t.id));
-  return tasks.map((t) => {
-    const e = live[t.id];
-    return e ? { ...t, status: e.status, progress: e.progress ?? t.progress, title: t.title ?? e.title } : t;
-  });
-}
-
-function ImportBar({ job, tasks }: { job: PlaylistImport; tasks: ImportTask[] }) {
-  const total = job.total || tasks.length;
-  const done = tasks.filter((t) => t.status === 'completed').length;
+function ImportBar({ job }: { job: PlaylistImport }) {
   return (
     <div className="mb-4 px-2 sm:px-3">
-      <p className="text-sm text-muted">{total ? `Downloading ${done} of ${total}` : 'Fetching playlist…'}</p>
-      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Import progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
-        <div className="h-full bg-accent transition-[width]" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
+      <p className="text-sm text-muted">{job.total ? `Downloading ${job.done} of ${job.total}` : 'Fetching playlist…'}</p>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Import progress" aria-valuemin={0} aria-valuemax={job.total} aria-valuenow={job.done}>
+        <div className="h-full bg-accent transition-[width]" style={{ width: `${job.total ? (job.done / job.total) * 100 : 0}%` }} />
       </div>
     </div>
   );
@@ -124,16 +90,21 @@ export default function Playlist() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { data: playlist, isLoading, isError } = usePlaylist(id);
+  const items = usePlaylistItems(id, !!playlist?.import?.running);
   const mutations = usePlaylistMutations(id);
+  const play = usePlayCollection();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [order, setOrder] = useState<PlaylistTrack[]>([]);
-  const dragFrom = useRef<number | null>(null);
+  const dragged = useRef<PlaylistTrack | null>(null);
+  const rows = flat(items);
+  const tracks = rows.flatMap((r) => (r.track ? [r.track] : []));
 
-  useEffect(() => setOrder(playlist?.tracks ?? []), [playlist?.tracks]);
-  const importTasks = useImportTasks(playlist?.import ?? null);
-  const listId = playlist?.import ? new URL(playlist.import.url).searchParams.get('list') : null;
-  const preview = useOnlinePlaylist(listId ?? '', !!listId);
+  // Entries queued after page load have no live event yet; seed them so rows show their state
+  const pages = items.data;
+  useEffect(() => {
+    const pending = (pages?.pages ?? []).flatMap((p) => p.data).flatMap((r) => (r.pending && r.pending.status !== 'failed' && r.pending.status !== 'cancelled' ? [{ ...r.pending, mediaId: null, errorMessage: null } as unknown as Task] : []));
+    if (pending.length) dispatch(hydrated(pending));
+  }, [pages, dispatch]);
 
   if (isLoading)
     return (
@@ -146,23 +117,13 @@ export default function Playlist() {
   if (isError || !playlist) return <Status icon="playlist_remove" title="This playlist isn't available" message="It may be private or deleted." />;
 
   const owner = playlist.isOwner;
-  // Tracks still downloading sit at their playlist position until they land in the track list
-  const pending = importTasks.filter((t) => t.status !== 'completed' && t.position !== null);
-  const rows = pending.length
-    ? [...order.map((t, i) => ({ t, i, at: t.position })), ...pending.map((task) => ({ task, at: task.position ?? 0 }))].sort((a, b) => a.at - b.at)
-    : order.map((t, i) => ({ t, i }));
-  const previewByVideo = new Map((preview.data?.tracks ?? []).map((t) => [t.videoId, t]));
-  const play = (shuffle: boolean) => order.length && dispatch(playTracks({ tracks: order, shuffle }));
+  const playAll = (shuffle: boolean) => play(loadPlaylistTracks(id), shuffle);
 
-  function drop(to: number) {
-    const from = dragFrom.current;
-    dragFrom.current = null;
-    if (from === null || from === to) return;
-    const next = [...order];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setOrder(next);
-    mutations.reorder.mutate(next.map((t) => t.id), { onError: (e) => toast(errorMessage(e)) });
+  function drop(target: PlaylistTrack) {
+    const from = dragged.current;
+    dragged.current = null;
+    if (!from || from.id === target.id) return;
+    mutations.move.mutate({ mediaId: from.id, position: target.position }, { onError: (e) => toast(errorMessage(e)) });
   }
 
   const ownerMenu = [
@@ -184,8 +145,8 @@ export default function Playlist() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1478px] flex-col gap-4 px-4 sm:px-8 xl:flex-row xl:gap-12 xl:px-12">
-      <div className="xl:w-[380px] xl:shrink-0">
+    <CollectionLayout
+      header={
         <CollectionHeader
           cover={playlist.coverUrls}
           title={playlist.name}
@@ -205,46 +166,47 @@ export default function Playlist() {
               {owner ? (
                 <IconButton icon="edit" label="Edit playlist" onClick={() => setEditing(true)} className="h-10 w-10 bg-white/10" />
               ) : (
-                  <IconButton
-                    icon={playlist.saved ? 'library_add_check' : 'library_add'}
-                    label={playlist.saved ? 'Remove from library' : 'Save to library'}
-                    onClick={() => mutations.save.mutate(!playlist.saved)}
-                    className="h-10 w-10 bg-white/10"
-                  />
-                )}
-                <PlayButtons onPlay={() => play(false)} onShuffle={() => play(true)} disabled={!order.length} />
-                {owner && <Menu label="Playlist actions" items={ownerMenu} trigger={(props) => <IconButton {...props} icon="more_vert" label="More playlist actions" className="h-10 w-10 bg-white/10" />} />}
-              </>
-            }
-          />
-        </div>
-        <div className="min-w-0 flex-1 pb-6 xl:pt-6">
-          {playlist.import?.running && <ImportBar job={playlist.import} tasks={importTasks} />}
-          {!order.length && !playlist.import && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
-          <div role="table" aria-label="Tracks">
-            {rows.map((row) =>
-              'task' in row ? (
-                <PendingRow key={row.task.id} task={row.task} info={previewByVideo.get(videoIdOf(row.task.url) ?? '')} draggable={owner} />
-              ) : (
-              <TrackRow
-                key={row.t.id}
-                track={row.t}
-                tracks={order}
-                index={row.i}
-                onRemove={owner ? () => mutations.removeTrack.mutate(row.t.id) : undefined}
-                drag={
-                  owner
-                    ? {
-                        onDragStart: () => (dragFrom.current = row.i),
-                        onDragOver: (e) => e.preventDefault(),
-                        onDrop: () => drop(row.i),
-                      }
-                    : undefined
-                }
-              />
-            ),
-          )}
-        </div>
+                <IconButton
+                  icon={playlist.saved ? 'library_add_check' : 'library_add'}
+                  label={playlist.saved ? 'Remove from library' : 'Save to library'}
+                  onClick={() => mutations.save.mutate(!playlist.saved)}
+                  className="h-10 w-10 bg-white/10"
+                />
+              )}
+              <PlayButtons onPlay={() => playAll(false)} onShuffle={() => playAll(true)} disabled={!playlist.trackCount} />
+              {owner && <Menu label="Playlist actions" items={ownerMenu} trigger={(props) => <IconButton {...props} icon="more_vert" label="More playlist actions" className="h-10 w-10 bg-white/10" />} />}
+            </>
+          }
+        />
+      }
+    >
+      {playlist.import?.running && <ImportBar job={playlist.import} />}
+      {items.isLoading && Array.from({ length: 8 }, (_, i) => <TrackRowSkeleton key={i} />)}
+      {!items.isLoading && !rows.length && !playlist.import && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
+      <div role="table" aria-label="Tracks">
+        {rows.map((row) =>
+          row.pending ? (
+            <YoutubeRow key={row.id} result={asResult(row.pending)} error={row.pending.status === 'failed' || row.pending.status === 'cancelled' ? (REASON[row.pending.reason ?? ''] ?? "Couldn't download") : null} />
+          ) : (
+            <TrackRow
+              key={row.id}
+              track={row.track}
+              tracks={tracks}
+              index={tracks.indexOf(row.track)}
+              onRemove={owner ? () => mutations.removeTrack.mutate(row.track.id) : undefined}
+              drag={
+                owner
+                  ? {
+                      onDragStart: () => (dragged.current = row.track),
+                      onDragOver: (e) => e.preventDefault(),
+                      onDrop: () => drop(row.track),
+                    }
+                  : undefined
+              }
+            />
+          ),
+        )}
+        <LoadMore query={items} />
       </div>
       {editing && <EditDialog playlist={playlist} onClose={() => setEditing(false)} />}
       {confirmDelete && (
@@ -276,6 +238,6 @@ export default function Playlist() {
           <p className="pb-2 text-sm text-muted">"{playlist.name}" will be permanently deleted.</p>
         </Dialog>
       )}
-    </div>
+    </CollectionLayout>
   );
 }

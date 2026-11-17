@@ -1,10 +1,13 @@
 import fs from 'node:fs/promises';
-import { DAILY_LIMIT_MESSAGE, DEFAULT_SETTINGS, MAX_RETRIES, PLAYLIST_TASK_STATUS, TASK_STATUS, TERMINAL_TASK_STATUSES, dailyQuotaWhere, retryDelayMs } from '@openwav/shared';
+import { DAILY_LIMIT_MESSAGE, DEFAULT_SETTINGS, MAX_RETRIES, PLAYLIST_TASK_STATUS, STORAGE_LIMIT_MESSAGE, TASK_STATUS, TERMINAL_TASK_STATUSES, dailyQuotaWhere, overStorage, retryDelayMs, storageUsage } from '@openwav/shared';
 import { counter, gauge, histogram } from '@openwav/shared/metrics';
 
 const jobs = counter('download_jobs_total', 'Download jobs by outcome', ['status']);
 const duration = histogram('download_job_duration_seconds', 'Download job duration', ['status']);
 const inFlight = gauge('downloads_in_flight', 'Downloads currently running');
+
+export const DUPLICATE_RETRY_MS = 10_000;
+const STALE_MS = 30 * 60_000;
 
 export const slugify = (value) =>
   value.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 200) || 'unknown';
@@ -35,6 +38,19 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
       FROM playlist_tracks pt JOIN media m ON m.id = pt.media_id WHERE pt.playlist_id = ${job.playlistId}::uuid`;
     await tx.playlist.update({ where: { id: job.playlistId }, data: { totalTracks: count, totalDuration: total } });
   }
+
+  // Serialised per URL so two workers can never fetch the same track at once
+  const claim = (task) =>
+    prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtext(${task.url}))) l`;
+      const busy = await tx.downloadTask.findFirst({
+        where: { url: task.url, id: { not: task.id }, status: { in: [TASK_STATUS.downloading, TASK_STATUS.uploading] }, updatedAt: { gte: new Date(Date.now() - STALE_MS) } },
+        select: { id: true },
+      });
+      if (busy) return false;
+      await tx.downloadTask.update({ where: { id: task.id }, data: { status: TASK_STATUS.downloading, startedAt: new Date(), progress: 0 } });
+      return true;
+    });
 
   const completeTask = (tx, taskId, mediaId) =>
     tx.downloadTask.update({ where: { id: taskId }, data: { status: TASK_STATUS.completed, progress: 100, mediaId, completedAt: new Date(), errorMessage: null } });
@@ -112,17 +128,30 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
   async function download(job) {
     const task = await prisma.downloadTask.findUnique({ where: { id: job.taskId } });
     if (!task || task.status === TASK_STATUS.cancelled || task.status === TASK_STATUS.completed) return 'skipped';
-    const say = (status, progress = null, title = null, error = null) => emit({ taskId: task.id, status, progress, title, error, userId: job.userId });
+    const say = (status, progress = null, title = null, error = null, mediaId = null) => emit({ taskId: task.id, status, progress, title, error, url: job.url, mediaId, userId: job.userId });
     const existing = await findExisting(job.url, job.format);
     if (existing) {
       await prisma.$transaction(async (tx) => {
         await linkToPlaylist(tx, job, existing.id);
         await completeTask(tx, task.id, existing.id);
       });
-      say(TASK_STATUS.completed, 100, task.title);
+      say(TASK_STATUS.completed, 100, task.title, null, existing.id);
       jobs.inc({ status: 'existing' });
       await finishPlaylistTask(job.playlistTaskId);
       return existing.id;
+    }
+    if (job.userId && overStorage(await storageUsage(prisma, job.userId))) {
+      await prisma.downloadTask.update({ where: { id: task.id }, data: { status: TASK_STATUS.failed, errorMessage: STORAGE_LIMIT_MESSAGE } });
+      say(TASK_STATUS.failed, null, task.title, STORAGE_LIMIT_MESSAGE);
+      jobs.inc({ status: 'storage_limit' });
+      await finishPlaylistTask(job.playlistTaskId);
+      return 'failed';
+    }
+    if (!(await claim(task))) {
+      say(TASK_STATUS.queued, 0, task.title);
+      await publishRetry(job, DUPLICATE_RETRY_MS);
+      jobs.inc({ status: 'deferred' });
+      return 'deferred';
     }
     const controller = new AbortController();
     controllers.set(task.id, controller);
@@ -130,7 +159,6 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
     inFlight.inc();
     let file = null;
     try {
-      await prisma.downloadTask.update({ where: { id: task.id }, data: { status: TASK_STATUS.downloading, startedAt: new Date(), progress: 0 } });
       const meta = await ytdlp.probe(job.url, controller.signal);
       say(TASK_STATUS.downloading, 2, meta.title);
       let last = 0;
@@ -160,7 +188,7 @@ export function createJobs({ prisma, ytdlp, storage, emit, publishDownload, publ
       const fileSize = await storage.uploadAudio(file, objectKey, ext);
       const coverKey = meta.thumbnailUrl ? await storage.uploadCover(meta.thumbnailUrl, meta.sourceId ?? task.id).catch((err) => (logger.warn({ err: err.message }, 'cover upload failed'), null)) : null;
       const media = await saveMedia(task, job, meta, objectKey, fileSize, coverKey);
-      say(TASK_STATUS.completed, 100, meta.title);
+      say(TASK_STATUS.completed, 100, meta.title, null, media.id);
       jobs.inc({ status: 'completed' });
       stop({ status: 'completed' });
       return media.id;

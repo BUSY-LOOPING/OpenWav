@@ -81,4 +81,3 @@ jobs:
           cache-dependency-path: services/${{ matrix.service }}/requirements*.txt
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: pytest -o addopts= -v ${{ matrix.args }}
-# Edited by Claude Code

@@ -72,7 +72,7 @@ const { app } = createApp({
   scraper: createScraper({ baseUrl: config.SCRAPER_URL, redis }),
   recommender: createRecommender({ baseUrl: config.RECOMMENDER_URL }),
   lyrics: createLyrics({ redis }),
-  monitoring: createMonitoring({ prometheusUrl: config.PROMETHEUS_URL, alertmanagerUrl: config.ALERTMANAGER_URL }),
+  monitoring: createMonitoring({ prometheusUrl: config.PROMETHEUS_URL, alertmanagerUrl: config.ALERTMANAGER_URL, tempoUrl: config.TEMPO_URL, lokiUrl: config.LOKI_URL }),
 });
 
 const server = app.listen(config.PORT, () => logger.info({ port: config.PORT }, 'backend listening'));

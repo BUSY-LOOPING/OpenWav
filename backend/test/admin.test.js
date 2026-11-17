@@ -66,6 +66,28 @@ describe('admin', () => {
     expect((await ctx.request.post('/api/v1/admin/discovery/run').set(as(user))).status).toBe(403);
   });
 
+  it('reports host metrics and refuses when Prometheus is down', async () => {
+    const server = { cpu: { usage: 0.2, cores: 4, load1: 0.5 }, disks: [{ mount: '/', availBytes: 1, sizeBytes: 2 }] };
+    ctx = buildApp({ monitoring: { ...ctx.external.monitoring, server: async () => server } });
+    expect((await ctx.request.get('/api/v1/admin/server').set(as(admin)).expect(200)).body.data).toEqual(server);
+    expect((await ctx.request.get('/api/v1/admin/server').set(as(user))).status).toBe(403);
+    ctx = buildApp({ monitoring: { ...ctx.external.monitoring, server: async () => Promise.reject(new Error('down')) } });
+    expect((await ctx.request.get('/api/v1/admin/server').set(as(admin))).status).toBe(503);
+  });
+
+  it('shows storage used per user and sets a custom quota or falls back to the default', async () => {
+    await createTrack({ uploadedBy: user.id, fileSize: 300 });
+    await createTrack({ uploadedBy: user.id, fileSize: 200, status: 'failed' });
+    await prisma.setting.create({ data: { key: 'storage.default_user_quota_gb', value: 2 } });
+    const storageOf = async () => (await ctx.request.get('/api/v1/admin/users').set(as(admin))).body.data.find((u) => u.id === user.id).storage;
+    expect(await storageOf()).toEqual({ usedBytes: 300, quotaBytes: 2 * 1024 ** 3, custom: false });
+    await ctx.request.patch(`/api/v1/admin/users/${user.id}`).set(as(admin)).send({ storageQuotaBytes: 1000 }).expect(200);
+    expect(await storageOf()).toEqual({ usedBytes: 300, quotaBytes: 1000, custom: true });
+    await ctx.request.patch(`/api/v1/admin/users/${user.id}`).set(as(admin)).send({ storageQuotaBytes: null }).expect(200);
+    expect((await storageOf()).custom).toBe(false);
+    expect((await ctx.request.patch(`/api/v1/admin/users/${user.id}`).set(as(admin)).send({ storageQuotaBytes: -1 })).status).toBe(400);
+  });
+
   it('bans users, revoking their sessions, and refuses self-demotion', async () => {
     await prisma.refreshToken.create({ data: { userId: user.id, tokenHash: 'h1', expiresAt: new Date(Date.now() + 1e6) } });
     await ctx.request.patch(`/api/v1/admin/users/${user.id}`).set(as(admin)).send({ isActive: false }).expect(200);

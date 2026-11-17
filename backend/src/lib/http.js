@@ -22,18 +22,25 @@ export const pageQuery = z.object({
 });
 
 export function encodeCursor(row, field = 'createdAt') {
-  return Buffer.from(JSON.stringify([row[field].toISOString(), row.id])).toString('base64url');
+  const value = row[field];
+  return Buffer.from(JSON.stringify([value instanceof Date ? value.toISOString() : value, row.id, value instanceof Date])).toString('base64url');
 }
 
-export function cursorWhere(cursor, field = 'createdAt') {
-  if (!cursor) return {};
+export function decodeCursor(cursor) {
   try {
-    const [at, id] = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-    const date = new Date(at);
-    return { OR: [{ [field]: { lt: date } }, { [field]: date, id: { lt: id } }] };
+    const [value, id, isDate = true] = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+    if (typeof id !== 'string') throw new Error('bad cursor');
+    return { value: isDate ? new Date(value) : value, id };
   } catch {
     throw badRequest('Invalid cursor');
   }
+}
+
+export function cursorWhere(cursor, field = 'createdAt', dir = 'desc') {
+  if (!cursor) return {};
+  const { value, id } = decodeCursor(cursor);
+  const op = dir === 'asc' ? 'gt' : 'lt';
+  return { OR: [{ [field]: { [op]: value } }, { [field]: value, id: { [op]: id } }] };
 }
 
 export function page(rows, limit, field = 'createdAt') {

@@ -49,6 +49,21 @@ groups:
 
   - name: openwav-availability
     rules:
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|devtmpfs|overlay|squashfs|efivarfs|vfat|ramfs|nsfs|autofs"} / node_filesystem_size_bytes{fstype!~"tmpfs|devtmpfs|overlay|squashfs|efivarfs|vfat|ramfs|nsfs|autofs"} < 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.mountpoint }} has {{ $value | humanizePercentage }} free"
+          description: "Less than 10% of the disk mounted at {{ $labels.mountpoint }} is free."
+      - alert: MemoryPressure
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host has {{ $value | humanizePercentage }} memory available"
       - alert: ServiceDown
         expr: up == 0
         for: 2m

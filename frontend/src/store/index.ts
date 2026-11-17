@@ -1,10 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { useDispatch, useSelector } from 'react-redux';
 import auth from './auth';
+import downloads from './downloads';
 import player from './player';
 
 export function makeStore() {
-  return configureStore({ reducer: { auth, player } });
+  return configureStore({ reducer: { auth, downloads, player } });
 }
 
 export const store = makeStore();

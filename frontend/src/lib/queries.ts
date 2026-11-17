@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { errorMessage, get, getPage, send } from './api';
 import { track } from './events';
@@ -16,18 +17,23 @@ import type {
   DownloadResponse,
   Explore,
   HistoryTrack,
+  LogLine,
   Lyrics,
   Playlist,
   OnlinePlaylistDetail,
+  OnlinePlaylistTrack,
   PlaylistDetail,
+  PlaylistItem,
   RecommenderInsights,
   RelatedResults,
   SearchResults,
   SearchScope,
   SearchType,
   Section,
+  ServerMetrics,
   Settings,
   Task,
+  TraceSummary,
   Track,
   User,
 } from './types';
@@ -61,12 +67,22 @@ export const useLyrics = (id: string | undefined) =>
   useQuery({ queryKey: keys.lyrics(id ?? ''), queryFn: () => get<Lyrics>(`/media/${id}/lyrics`), enabled: !!id, retry: false });
 export const useArtist = (id: string) => useQuery({ queryKey: keys.artist(id), queryFn: () => get<ArtistDetail>(`/artists/${id}`) });
 export const useAlbum = (id: string) => useQuery({ queryKey: keys.album(id), queryFn: () => get<AlbumDetail>(`/albums/${id}`) });
+const IMPORT_POLL_MS = 4000;
 export const usePlaylist = (id: string) =>
-  useQuery({ queryKey: keys.playlist(id), queryFn: () => get<PlaylistDetail>(`/playlists/${id}`), refetchInterval: (q) => (q.state.data?.import?.running ? 4000 : false) });
-export const useMyPlaylists = (enabled = true) =>
-  useQuery({ queryKey: keys.myPlaylists, queryFn: () => get<Playlist[]>('/library/playlists'), enabled });
-export const useLibraryArtists = () => useQuery({ queryKey: keys.library('artists'), queryFn: () => get<Artist[]>('/library/artists') });
-export const useLibraryAlbums = () => useQuery({ queryKey: keys.library('albums'), queryFn: () => get<Album[]>('/library/albums') });
+  useQuery({ queryKey: keys.playlist(id), queryFn: () => get<PlaylistDetail>(`/playlists/${id}`), refetchInterval: (q) => (q.state.data?.import?.running ? IMPORT_POLL_MS : false) });
+export const usePlaylistItems = (id: string, importing: boolean) => {
+  const query = usePaged<PlaylistItem>([...keys.playlist(id), 'items'], `/playlists/${id}/items`, { limit: 50 });
+  const { refetch } = query;
+  useEffect(() => {
+    if (!importing) return;
+    const timer = setInterval(() => refetch(), IMPORT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [importing, refetch]);
+  return query;
+};
+export const useMyPlaylists = (enabled = true) => usePaged<Playlist>(keys.myPlaylists, '/library/playlists', { limit: 50 }, enabled);
+export const useLibraryArtists = () => usePaged<Artist>(keys.library('artists'), '/library/artists', { limit: 48 });
+export const useLibraryAlbums = () => usePaged<Album>(keys.library('albums'), '/library/albums', { limit: 48 });
 export const usePreferences = () => useQuery({ queryKey: keys.preferences, queryFn: () => get<Record<string, unknown>>('/me/preferences') });
 
 export function usePaged<T>(key: unknown[], url: string, params: Record<string, unknown> = {}, enabled = true) {
@@ -79,22 +95,36 @@ export function usePaged<T>(key: unknown[], url: string, params: Record<string, 
   });
 }
 
-export const useOnlinePlaylist = (id: string, enabled = true) =>
-  useQuery({ queryKey: ['online-playlist', id], queryFn: () => get<OnlinePlaylistDetail>(`/search/playlist/${id}`), staleTime: 5 * 60_000, enabled: enabled && !!id });
+export const useOnlinePlaylist = (id: string) =>
+  useQuery({ queryKey: ['online-playlist', id], queryFn: () => get<OnlinePlaylistDetail>(`/search/playlist/${id}`), staleTime: 5 * 60_000, enabled: !!id });
+export const useOnlinePlaylistTracks = (id: string) => usePaged<OnlinePlaylistTrack>(['online-playlist', id, 'tracks'], `/search/playlist/${id}/tracks`, { limit: 50 }, !!id);
+
+export async function loadAll<T>(url: string, params: Record<string, unknown> = {}) {
+  const items: T[] = [];
+  let cursor: string | null | undefined;
+  do {
+    const page = await getPage<T>(url, { ...params, limit: 100, cursor: cursor || undefined });
+    items.push(...page.data);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return items;
+}
+
+export const flat = <T,>(query: { data?: { pages: { data: T[] }[] } }) => query.data?.pages.flatMap((p) => p.data) ?? [];
 
 export function usePlayCollection() {
   const dispatch = useAppDispatch();
-  return async (load: () => Promise<Track[]>) => {
+  return async (load: () => Promise<Track[]>, shuffle = false) => {
     try {
       const tracks = await load();
       if (!tracks.length) return toast('Nothing to play yet');
-      dispatch(playTracks({ tracks }));
+      dispatch(playTracks({ tracks, shuffle }));
     } catch (e) {
       toast(errorMessage(e, 'Could not play'));
     }
   };
 }
-export const loadPlaylistTracks = (id: string) => () => get<PlaylistDetail>(`/playlists/${id}`).then((p) => p.tracks);
+export const loadPlaylistTracks = (id: string) => () => loadAll<PlaylistItem>(`/playlists/${id}/items`).then((items) => items.flatMap((i) => (i.track ? [i.track] : [])));
 export const loadLikedTracks = () => getPage<Track>('/library/liked', { limit: 100 }).then((p) => p.data);
 
 export const useLiked = () => usePaged<Track>(keys.library('liked'), '/library/liked');
@@ -166,7 +196,7 @@ export function usePlaylistMutations(id: string) {
         refresh();
       },
     }),
-    reorder: useMutation({ mutationFn: (mediaIds: string[]) => send('put', `/playlists/${id}/order`, { mediaIds }), onSettled: refresh }),
+    move: useMutation({ mutationFn: ({ mediaId, position }: { mediaId: string; position: number }) => send('put', `/playlists/${id}/tracks/${mediaId}/position`, { position }), onSettled: refresh }),
     save: useMutation({
       mutationFn: (saved: boolean) => send<{ saved: boolean }>(saved ? 'put' : 'delete', `/playlists/${id}/save`),
       onSuccess: refresh,
@@ -246,6 +276,11 @@ export const useAdminRecommender = () =>
   });
 export const useAdminCookies = () =>
   useQuery({ queryKey: keys.admin('cookies'), queryFn: () => get<{ configured: boolean; entries: number; domains: string[]; expiresAt: string | null; updatedAt: string | null }>('/admin/ytdlp/cookies') });
+export const useAdminServer = () => useQuery({ queryKey: keys.admin('server'), queryFn: () => get<ServerMetrics>('/admin/server'), refetchInterval: 15_000, retry: false });
+export const useAdminTraces = (params: Record<string, unknown>, live: boolean) =>
+  useQuery({ queryKey: keys.admin('traces', params), queryFn: () => get<TraceSummary[]>('/admin/traces', params), refetchInterval: live ? 5000 : false, retry: false });
+export const useAdminLogs = (params: Record<string, unknown>, live: boolean) =>
+  useQuery({ queryKey: keys.admin('logs', params), queryFn: () => get<LogLine[]>('/admin/logs', params), refetchInterval: live ? 3000 : false, retry: false });
 export const useAdminMedia = (params: Record<string, unknown>) => usePaged<Track>(keys.admin('media'), '/admin/media', params);
 
 export function useAdminAction(scope: string) {

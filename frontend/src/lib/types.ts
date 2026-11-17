@@ -67,13 +67,25 @@ export interface PlaylistImport {
   running: boolean;
   url: string;
   total: number;
-  tasks: { id: string; title: string | null; url: string; status: TaskStatus; progress: number; position: number | null; reason: 'daily_limit' | null }[];
+  done: number;
+  failed: number;
 }
 
 export interface PlaylistDetail extends Playlist {
-  tracks: PlaylistTrack[];
   import: PlaylistImport | null;
 }
+
+export interface PendingTrack {
+  id: string;
+  url: string;
+  title: string | null;
+  status: TaskStatus;
+  progress: number;
+  position: number;
+  reason: 'daily_limit' | 'storage_limit' | null;
+}
+
+export type PlaylistItem = { id: string; position: number } & ({ track: PlaylistTrack; pending: null } | { track: null; pending: PendingTrack });
 
 export interface Artist {
   id: string;
@@ -153,9 +165,13 @@ export interface OnlinePlaylistDetail {
   year: string | null;
   thumbnailUrl: string | null;
   trackCount: number;
+  missing: number;
   durationSec: number;
   url: string;
-  tracks: YoutubeResult[];
+}
+
+export interface OnlinePlaylistTrack extends YoutubeResult {
+  position: number;
 }
 
 export interface OnlineResults {
@@ -228,6 +244,8 @@ export interface ProgressEvent {
   progress: number | null;
   title: string | null;
   error: string | null;
+  url: string | null;
+  mediaId: string | null;
 }
 
 export interface Lyrics {
@@ -287,6 +305,31 @@ export interface Alert {
 export interface AdminUser extends User {
   isActive: boolean;
   lastSeen?: string | null;
+  storage: { usedBytes: number; quotaBytes: number | null; custom: boolean };
+}
+
+export interface ServerMetrics {
+  cpu: { usage: number | null; cores: number | null; load1: number | null };
+  memory: { totalBytes: number | null; availableBytes: number | null };
+  swap: { totalBytes: number | null; freeBytes: number | null };
+  uptimeSec: number | null;
+  network: { rxBytesPerSec: number | null; txBytesPerSec: number | null };
+  disks: { mount: string; device: string; fstype: string; sizeBytes: number; availBytes: number | null }[];
+}
+
+export interface TraceSummary {
+  traceId: string;
+  service: string | null;
+  name: string | null;
+  startedAt: string;
+  durationMs: number;
+}
+
+export interface LogLine {
+  at: string;
+  service: string | null;
+  level: string | null;
+  line: string;
 }
 
 export type Settings = Record<string, unknown>;

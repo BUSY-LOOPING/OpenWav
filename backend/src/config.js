@@ -25,6 +25,8 @@ const schema = z.object({
   RECOMMENDER_URL: z.string().default('http://localhost:8000'),
   PROMETHEUS_URL: z.string().default('http://localhost:9090'),
   ALERTMANAGER_URL: z.string().default('http://localhost:9093'),
+  TEMPO_URL: z.string().default('http://localhost:3200'),
+  LOKI_URL: z.string().default('http://localhost:3100'),
   GRAFANA_URL: z.string().default('http://localhost:3001'),
   RABBITMQ_UI_URL: z.string().default('http://localhost:15672'),
   OPS_GRAFANA_URL: z.string().default('http://127.0.0.1:3001'),

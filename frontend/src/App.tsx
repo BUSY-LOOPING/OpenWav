@@ -27,6 +27,8 @@ const Media = lazy(() => import('./pages/admin/Media'));
 const Discovery = lazy(() => import('./pages/admin/Discovery'));
 const Recommender = lazy(() => import('./pages/admin/Recommender'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
+const Traces = lazy(() => import('./pages/admin/Traces'));
+const Logs = lazy(() => import('./pages/admin/Logs'));
 
 const loading = <Spinner className="mx-auto mt-24" />;
 
@@ -92,6 +94,8 @@ export default function App() {
             <Route path="media" element={<Media />} />
             <Route path="discovery" element={<Discovery />} />
             <Route path="recommender" element={<Recommender />} />
+            <Route path="traces" element={<Traces />} />
+            <Route path="logs" element={<Logs />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>

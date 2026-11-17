@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react';
-import { IconButton, Skeleton, Spinner, Status } from '../../components/ui';
-
-import type { Pager } from './usePager';
+import { LoadMore, Skeleton, Status } from '../../components/ui';
 
 export interface Column<T> {
   header: string;
@@ -17,10 +15,10 @@ interface DataListProps<T extends { id: string }> {
   selected?: Set<string>;
   onToggle?: (id: string) => void;
   onToggleAll?: () => void;
-  pager?: Pager;
+  paged?: { hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown };
 }
 
-export function DataList<T extends { id: string }>({ items, columns, loading, empty, selected, onToggle, onToggleAll, pager }: DataListProps<T>) {
+export function DataList<T extends { id: string }>({ items, columns, loading, empty, selected, onToggle, onToggleAll, paged }: DataListProps<T>) {
   if (loading) return <div className="space-y-2">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>;
   if (!items.length) return <Status icon="inbox" title={empty} />;
   const allSelected = !!selected && items.every((i) => selected.has(i.id));
@@ -78,14 +76,7 @@ export function DataList<T extends { id: string }>({ items, columns, loading, em
           </li>
         ))}
       </ul>
-      {pager && (pager.hasPrev || pager.hasNext) && (
-        <nav aria-label="Pagination" className="mt-4 flex items-center justify-end gap-2 text-sm text-muted">
-          {pager.loading && <Spinner className="h-4 w-4" />}
-          <IconButton icon="chevron_left" label="Previous page" disabled={!pager.hasPrev || pager.loading} onClick={pager.onPrev} />
-          <span className="tabular-nums">Page {pager.page}</span>
-          <IconButton icon="chevron_right" label="Next page" disabled={!pager.hasNext || pager.loading} onClick={pager.onNext} />
-        </nav>
-      )}
+      {paged && <LoadMore query={paged} />}
     </>
   );
 }

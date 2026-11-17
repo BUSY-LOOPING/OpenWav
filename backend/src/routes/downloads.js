@@ -1,4 +1,4 @@
-import { AUDIO_FORMATS, AUDIO_QUALITIES, trackingEventSchema } from '@openwav/shared';
+import { AUDIO_FORMATS, AUDIO_QUALITIES, TERMINAL_TASK_STATUSES, trackingEventSchema } from '@openwav/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 import { notFound } from '../lib/errors.js';
@@ -19,10 +19,10 @@ export function downloadRoutes({ prisma, auth, serialize, downloads, limits, tok
     },
   );
 
-  router.get('/downloads', auth.authenticate, validate({ query: pageQuery }), async (req, res) => {
-    const { cursor, limit } = req.query;
+  router.get('/downloads', auth.authenticate, validate({ query: pageQuery.extend({ active: z.stringbool().optional() }) }), async (req, res) => {
+    const { cursor, limit, active } = req.query;
     const rows = await prisma.downloadTask.findMany({
-      where: { requestedBy: req.user.id, ...cursorWhere(cursor) },
+      where: { requestedBy: req.user.id, ...(active ? { status: { notIn: TERMINAL_TASK_STATUSES } } : {}), ...cursorWhere(cursor) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       include: { media: { select: { title: true } } },

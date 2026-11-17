@@ -4,10 +4,9 @@ import { toast } from '../../lib/toast';
 import { Button, Thumb, inputClass } from '../../components/ui';
 import { errorMessage } from '../../lib/api';
 import { artistNames, formatTime } from '../../lib/format';
-import { useAdminAction, useAdminMedia } from '../../lib/queries';
+import { flat, useAdminAction, useAdminMedia } from '../../lib/queries';
 import type { Track } from '../../lib/types';
 import { DataList } from './DataList';
-import { usePager } from './usePager';
 
 function EditDialog({ track, onClose }: { track: Track; onClose: () => void }) {
   const action = useAdminAction('media');
@@ -70,7 +69,7 @@ export default function Media() {
   }, [search]);
 
   const query = useAdminMedia({ search: debounced || undefined });
-  const { items, pager } = usePager(query, debounced);
+  const items = flat(query);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -80,7 +79,7 @@ export default function Media() {
         items={items}
         loading={query.isLoading}
         empty="No tracks"
-        pager={pager}
+        paged={query}
         columns={[
           {
             header: 'Track',

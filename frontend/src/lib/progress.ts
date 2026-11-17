@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { API_URL, send } from './api';
-import type { ProgressEvent } from './types';
+import { loadAll } from './queries';
+import type { ProgressEvent, Task } from './types';
+import { hydrated, progressed } from '../store/downloads';
+import { useAppDispatch } from '../store';
 
 type Listener = (event: ProgressEvent) => void;
 
@@ -49,11 +52,11 @@ export function useProgress(onEvent: Listener, enabled = true) {
   }, [enabled]);
 }
 
-export function useTaskProgress(taskIds: string[]) {
-  const [events, setEvents] = useState<Record<string, ProgressEvent>>({});
-  const watched = taskIds.join(',');
-  useProgress((event) => {
-    if (watched.split(',').includes(event.taskId)) setEvents((prev) => ({ ...prev, [event.taskId]: event }));
-  }, taskIds.length > 0);
-  return events;
+export function useDownloadSync(enabled: boolean) {
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    if (!enabled) return;
+    loadAll<Task>('/downloads', { active: true }).then((tasks) => dispatch(hydrated(tasks)), () => undefined);
+  }, [enabled, dispatch]);
+  useProgress((event) => dispatch(progressed(event)), enabled);
 }

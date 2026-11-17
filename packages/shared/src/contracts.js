@@ -35,6 +35,7 @@ export const PLAYLIST_TASK_STATUS = Object.freeze({
 export const TERMINAL_TASK_STATUSES = [TASK_STATUS.completed, TASK_STATUS.failed, TASK_STATUS.cancelled];
 
 export const DAILY_LIMIT_MESSAGE = 'Daily download limit reached';
+export const STORAGE_LIMIT_MESSAGE = 'Storage limit reached';
 
 export const dailyQuotaWhere = (userId, now = Date.now()) => ({
   requestedBy: userId,
@@ -87,6 +88,8 @@ export const progressEventSchema = z.object({
   progress: z.number().min(0).max(100).nullable(),
   title: z.string().nullable(),
   error: z.string().nullable(),
+  url: z.string().nullable(),
+  mediaId: z.string().uuid().nullable(),
   userId: z.string().uuid().nullable(),
   timestamp: z.string(),
 });
@@ -107,6 +110,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   'downloads.allowed_domains': ['youtube.com', 'youtu.be', 'music.youtube.com', 'soundcloud.com'],
   'downloads.default_format': 'mp3',
   'downloads.default_quality': '192k',
+  'downloads.concurrency': 3,
+  'storage.default_user_quota_gb': 0,
   'auth.registration_enabled': true,
   'ratelimit.global_per_minute': 300,
   'ratelimit.auth_per_15min': 20,
@@ -135,9 +140,21 @@ export const DEFAULT_SETTINGS = Object.freeze({
   'discovery.playlists': [],
 });
 
-export function buildProgressEvent({ taskId, status, progress = null, title = null, error = null, userId = null }) {
-  return progressEventSchema.parse({ taskId, status, progress, title, error, userId, timestamp: new Date().toISOString() });
+export function buildProgressEvent({ taskId, status, progress = null, title = null, error = null, url = null, mediaId = null, userId = null }) {
+  return progressEventSchema.parse({ taskId, status, progress, title, error, url, mediaId, userId, timestamp: new Date().toISOString() });
 }
+
+export async function storageUsage(prisma, userId) {
+  const [user, setting, used] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { storageQuotaBytes: true } }),
+    prisma.setting.findUnique({ where: { key: 'storage.default_user_quota_gb' } }),
+    prisma.media.aggregate({ _sum: { fileSize: true }, where: { uploadedBy: userId, status: 'completed' } }),
+  ]);
+  const quota = user?.storageQuotaBytes ?? Math.round((setting?.value ?? DEFAULT_SETTINGS['storage.default_user_quota_gb']) * 1024 ** 3);
+  return { usedBytes: Number(used._sum.fileSize ?? 0), quotaBytes: Number(quota) || null };
+}
+
+export const overStorage = ({ usedBytes, quotaBytes }) => quotaBytes !== null && usedBytes >= quotaBytes;
 
 export function isAllowedDomain(url, allowedDomains) {
   const host = new URL(url).hostname.toLowerCase();

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { NewPlaylistDialog } from '../PlaylistDialogs';
-import { Icon } from '../ui';
-import { loadLikedTracks, loadPlaylistTracks, useMyPlaylists, usePlayCollection } from '../../lib/queries';
+import { Icon, LoadMore } from '../ui';
+import { flat, loadLikedTracks, loadPlaylistTracks, useMyPlaylists, usePlayCollection } from '../../lib/queries';
 import type { Track } from '../../lib/types';
 
 function SidePlaylist({ to, title, subtitle, load }: { to: string; title: string; subtitle: React.ReactNode; load: () => Promise<Track[]> }) {
@@ -35,7 +35,7 @@ const NAV = [
 
 export function SideNav({ expanded, drawer = false }: { expanded: boolean; drawer?: boolean }) {
   const [creating, setCreating] = useState(false);
-  const { data: playlists = [] } = useMyPlaylists();
+  const playlists = useMyPlaylists();
 
   return (
     <nav aria-label="Main" className={`flex-col overflow-hidden bg-canvas ${drawer ? 'flex min-h-0 flex-1' : `hidden shrink-0 border-r border-white/5 md:flex ${expanded ? 'w-60' : 'w-[72px]'}`}`}>
@@ -76,9 +76,12 @@ export function SideNav({ expanded, drawer = false }: { expanded: boolean; drawe
                 </>
               }
             />
-            {playlists.map((p) => (
+            {flat(playlists).map((p) => (
               <SidePlaylist key={p.id} to={`/playlist/${p.id}`} title={p.name} subtitle={p.owner?.username} load={loadPlaylistTracks(p.id)} />
             ))}
+            <li>
+              <LoadMore query={playlists} />
+            </li>
           </ul>
         </>
       )}
@@ -90,10 +93,10 @@ export function SideNav({ expanded, drawer = false }: { expanded: boolean; drawe
 export function BottomNav() {
   return (
     <nav aria-label="Main" className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-surface md:hidden">
-      <ul className="flex">
+      <ul className="flex h-14">
         {NAV.map((item) => (
           <li key={item.to} className="flex-1">
-            <NavLink to={item.to} end={item.to === '/'} className={({ isActive }) => `flex flex-col items-center gap-0.5 py-2 text-[11px] ${isActive ? 'text-white' : 'text-muted'}`}>
+            <NavLink to={item.to} end={item.to === '/'} className={({ isActive }) => `flex h-full flex-col items-center justify-center gap-0.5 text-[11px] ${isActive ? 'text-white' : 'text-muted'}`}>
               {({ isActive }) => (
                 <>
                   <Icon name={item.icon} fill={isActive} />
@@ -107,4 +110,3 @@ export function BottomNav() {
     </nav>
   );
 }
-// Edited by Claude Code

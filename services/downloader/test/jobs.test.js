@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createPrisma } from '@openwav/db';
 import { createLogger } from '@openwav/shared/logger';
 import { beforeEach, describe, expect, inject, it } from 'vitest';
-import { createJobs, slugify } from '../src/jobs.js';
+import { DUPLICATE_RETRY_MS, createJobs, slugify } from '../src/jobs.js';
 
 const prisma = createPrisma(inject('databaseUrl'));
 const logger = createLogger('test');
@@ -83,7 +83,36 @@ describe('download job', () => {
     expect(storage.uploads).toEqual(['vid1.mp3']);
     expect(await prisma.downloadTask.findUnique({ where: { id: task.id } })).toMatchObject({ status: 'completed', progress: 100, mediaId });
     expect(events.map((e) => e.status)).toEqual(['downloading', 'downloading', 'downloading', 'uploading', 'completed']);
-    expect(events.every((e) => e.userId === u.id)).toBe(true);
+    expect(events.every((e) => e.userId === u.id && e.url === task.url)).toBe(true);
+    expect(events.at(-1).mediaId).toBe(mediaId);
+  });
+
+  it('defers a second job for a track that is already downloading, then links the finished track', async () => {
+    let probes = 0;
+    const { jobs, retries } = await setup({ probe: async () => (probes++, meta) });
+    const url = 'https://www.youtube.com/watch?v=vid1';
+    await prisma.downloadTask.create({ data: { url, status: 'downloading' } });
+    const second = await prisma.downloadTask.create({ data: { url } });
+    expect(await jobs.download(job(second))).toBe('deferred');
+    expect(probes).toBe(0);
+    expect(retries).toEqual([[job(second), DUPLICATE_RETRY_MS]]);
+    expect((await prisma.downloadTask.findUnique({ where: { id: second.id } })).status).toBe('queued');
+    const media = await prisma.media.create({ data: { title: 'Song', url, sourceId: 'vid1', format: 'mp3', status: 'completed' } });
+    await prisma.downloadTask.updateMany({ where: { status: 'downloading' }, data: { status: 'completed' } });
+    expect(await jobs.download(job(second))).toBe(media.id);
+    expect(probes).toBe(0);
+  });
+
+  it('fails without downloading once the requester is over their storage quota', async () => {
+    let probed = false;
+    const { jobs, events } = await setup({ probe: async () => ((probed = true), meta) });
+    const u = await prisma.user.create({ data: { username: 'full', email: 'full@t.io', passwordHash: 'x', storageQuotaBytes: 10 } });
+    await prisma.media.create({ data: { title: 'Big', url: 'https://www.youtube.com/watch?v=big', status: 'completed', uploadedBy: u.id, fileSize: 10 } });
+    const task = await prisma.downloadTask.create({ data: { url: 'https://www.youtube.com/watch?v=more', requestedBy: u.id } });
+    expect(await jobs.download(job(task))).toBe('failed');
+    expect(probed).toBe(false);
+    expect(await prisma.downloadTask.findUnique({ where: { id: task.id } })).toMatchObject({ status: 'failed', errorMessage: 'Storage limit reached' });
+    expect(events).toMatchObject([{ status: 'failed', error: 'Storage limit reached' }]);
   });
 
   it('skips cancelled tasks without running yt-dlp', async () => {

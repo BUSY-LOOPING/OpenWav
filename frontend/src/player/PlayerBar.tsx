@@ -68,7 +68,7 @@ export function PlayerBar() {
   const effectiveVolume = muted ? 0 : volume;
 
   return (
-    <div className="fixed inset-x-0 bottom-14 z-40 bg-surface md:bottom-0" aria-label="Player">
+    <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 bg-surface md:bottom-0" aria-label="Player">
       <SeekBar className="absolute -top-[2px] left-0 h-1" />
       <div className="grid h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 sm:h-[72px] sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-4 sm:px-4">
         <button type="button" onClick={() => dispatch(setNowPlayingOpen(!open))} className="flex min-w-0 items-center gap-3 text-left" aria-label={open ? 'Close now playing' : 'Open now playing'} aria-expanded={open}>
