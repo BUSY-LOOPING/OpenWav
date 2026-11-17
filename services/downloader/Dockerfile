@@ -9,7 +9,9 @@ COPY packages/shared/package.json packages/shared/
 COPY services/downloader/package.json services/downloader/
 RUN npm ci --workspace services/downloader --workspace packages/db --workspace packages/shared --include-workspace-root --ignore-scripts
 COPY packages ./packages
-RUN npm run generate --workspace packages/db
+# Engines download at generate time; cache them across builds and retry flaky fetches
+RUN --mount=type=cache,target=/root/.cache/prisma,sharing=locked \
+    for attempt in 1 2 3; do npm run generate --workspace packages/db && exit 0; sleep 10; done; exit 1
 COPY services/downloader ./services/downloader
 
 FROM node:22-alpine
