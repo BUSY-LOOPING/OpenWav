@@ -65,7 +65,7 @@ export function SideNav({ expanded, drawer = false }: { expanded: boolean; drawe
           <button type="button" onClick={() => setCreating(true)} className="mx-4 my-2 flex items-center justify-center gap-2 rounded-full bg-white/10 py-2 text-sm font-medium hover:bg-white/20">
             <Icon name="add" /> New playlist
           </button>
-          <ul className="thin-scrollbar flex-1 overflow-y-auto px-2 pb-4" aria-label="Your playlists">
+          <ul className="hover-scrollbar flex-1 overflow-y-auto px-2 pb-4" aria-label="Your playlists">
             <SidePlaylist
               to="/library?tab=songs"
               title="Liked music"

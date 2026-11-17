@@ -91,6 +91,16 @@ body {
   display: none;
 }
 
+/* Secondary scroll areas only show their thumb while hovered, so the page has one visible scrollbar */
+@utility hover-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  &:hover,
+  &:focus-within {
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+}
+
 .thin-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;

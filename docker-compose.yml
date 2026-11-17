@@ -364,8 +364,8 @@ services:
     ports:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
-      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./infra/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      # A directory mount, unlike a file mount, sees files that git replaces on deploy, so SIGHUP picks them up
+      - ./infra/observability/prometheus:/etc/prometheus:ro
       - ${COLD_STORAGE_DIR:+${COLD_STORAGE_DIR}/}prometheusdata:/prometheus
 
   alertmanager:
