@@ -28,12 +28,12 @@ export default function AdminLayout() {
 
   return (
     <div className="flex h-full flex-col md:flex-row">
-      <aside className="shrink-0 border-b border-white/10 bg-canvas md:w-60 md:border-b-0 md:border-r">
+      <aside className="shrink-0 border-b border-white/10 bg-canvas md:flex md:w-60 md:flex-col md:border-b-0 md:border-r">
         <div className="flex h-16 items-center justify-between px-4">
           <Logo />
           <span className="rounded bg-accent/20 px-2 py-0.5 text-xs font-medium text-red-300">Admin</span>
         </div>
-        <nav aria-label="Admin" className="no-scrollbar flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:overflow-visible">
+        <nav aria-label="Admin" className="no-scrollbar md:hover-scrollbar flex gap-1 overflow-x-auto px-2 pb-2 md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:overflow-x-hidden">
           {LINKS.map((link) => (
             <NavLink
               key={link.to}
@@ -49,7 +49,7 @@ export default function AdminLayout() {
           </NavLink>
         </nav>
       </aside>
-      <main className="thin-scrollbar min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
+      <main className="thin-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
         <Outlet />
       </main>
     </div>
