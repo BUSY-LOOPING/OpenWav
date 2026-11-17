@@ -10,12 +10,15 @@ import { createAuth } from './middleware/auth.js';
 import { errorHandler, metricsMiddleware, notFoundHandler } from './middleware/observability.js';
 import { createRateLimiters } from './middleware/rateLimit.js';
 import { adminRoutes, opsCheck } from './routes/admin.js';
+import { opsRoutes } from './routes/ops.js';
 import { authRoutes } from './routes/auth.js';
 import { browseRoutes } from './routes/browse.js';
 import { downloadRoutes } from './routes/downloads.js';
 import { libraryRoutes } from './routes/library.js';
 import { playlistRoutes } from './routes/playlists.js';
 import { searchRoutes } from './routes/search.js';
+import { createAudit } from './services/audit.js';
+import { createCleanup } from './services/cleanup.js';
 import { createDownloadService } from './services/downloads.js';
 import { createEventService } from './services/events.js';
 import { createPlaylistService } from './services/playlists.js';
@@ -37,6 +40,8 @@ export function createApp(external) {
     downloads: createDownloadService({ prisma, settings, channel: external.channel, playlists }),
     events: createEventService({ prisma, settings, producer: external.producer, logger }),
     progress: createProgressHub({ subscriber: external.subscriber, logger }),
+    audit: createAudit({ prisma, logger }),
+    cleanup: createCleanup({ prisma, settings, storage: external.storage, config, logger }),
   };
 
   const app = express();
@@ -76,6 +81,7 @@ export function createApp(external) {
   api.use('/playlists', playlistRoutes(deps));
   api.use('/', downloadRoutes(deps));
   api.use('/admin', adminRoutes(deps));
+  api.use('/admin', opsRoutes(deps));
   app.use('/api/v1', api);
 
   app.use(notFoundHandler);

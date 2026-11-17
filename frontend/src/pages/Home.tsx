@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArtistCard, PlaylistCard, TrackCard } from '../components/Card';
+import { Ambient } from '../components/Ambient';
 import { Carousel } from '../components/Carousel';
 import { TrackMenu } from '../components/TrackMenu';
 import { Button, Chips, Icon, Skeleton, Status, Thumb } from '../components/ui';
@@ -92,9 +93,11 @@ export function CarouselSkeleton() {
 export default function Home() {
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useHome();
+  const quick = data?.find((s) => s.kind === 'quick_picks');
 
   return (
-    <div className="mx-auto max-w-[1478px] px-4 pt-4 sm:px-8 lg:px-12">
+    <div className="relative isolate mx-auto max-w-[1478px] px-4 pt-4 sm:px-8 lg:px-12">
+      <Ambient src={quick?.kind === 'quick_picks' ? quick.items[0]?.thumbnailUrl : null} />
       <Chips options={MOODS} value={null} onChange={(mood) => navigate(`/explore/mood/${encodeURIComponent(mood)}`)} className="mb-8" />
       {isLoading && Array.from({ length: 3 }, (_, i) => <CarouselSkeleton key={i} />)}
       {isError && <Status icon="wifi_off" title="Couldn't load your home feed" action={<Button onClick={() => refetch()}>Retry</Button>} />}

@@ -39,6 +39,7 @@ export default function OnlinePlaylist() {
 
   return (
     <CollectionLayout
+      ambient={playlist.thumbnailUrl}
       header={
         <CollectionHeader
           cover={[playlist.thumbnailUrl]}

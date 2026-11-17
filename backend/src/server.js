@@ -4,7 +4,7 @@ startTracing('backend');
 
 const { S3Client } = await import('@aws-sdk/client-s3');
 const { prisma } = await import('@openwav/db');
-const { assertTopology } = await import('@openwav/shared');
+const { SCRAPER_CONFIG_KEY, assertTopology, scraperConfig } = await import('@openwav/shared');
 const { createLogger } = await import('@openwav/shared/logger');
 const { initMetrics } = await import('@openwav/shared/metrics');
 const { default: amqplib } = await import('amqplib');
@@ -59,7 +59,7 @@ const storage = new S3Client({
 
 await connectRabbit();
 
-const { app } = createApp({
+const { app, deps } = createApp({
   prisma,
   redis,
   subscriber,
@@ -74,6 +74,13 @@ const { app } = createApp({
   lyrics: createLyrics({ redis }),
   monitoring: createMonitoring({ prometheusUrl: config.PROMETHEUS_URL, alertmanagerUrl: config.ALERTMANAGER_URL, tempoUrl: config.TEMPO_URL, lokiUrl: config.LOKI_URL }),
 });
+
+// The scraper reads its tunables from Redis so admin changes apply without a restart
+deps.settings
+  .all()
+  .then((current) => redis.set(SCRAPER_CONFIG_KEY, JSON.stringify(scraperConfig(current))))
+  .catch((err) => logger.warn({ err: err.message }, 'scraper config not published'));
+setInterval(() => deps.cleanup.tick().catch((err) => logger.error({ err }, 'storage cleanup failed')), 3_600_000).unref();
 
 const server = app.listen(config.PORT, () => logger.info({ port: config.PORT }, 'backend listening'));
 server.keepAliveTimeout = 65_000;

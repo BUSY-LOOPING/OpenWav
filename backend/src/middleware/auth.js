@@ -4,7 +4,8 @@ export function createAuth({ prisma, tokens }) {
   async function resolveUser(req) {
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) return null;
-    const { sub } = tokens.verifyAccess(header.slice(7));
+    const { sub, sid } = tokens.verifyAccess(header.slice(7));
+    req.sessionId = sid ?? null;
     const user = await prisma.user.findUnique({ where: { id: sub }, select: { id: true, username: true, email: true, role: true, isActive: true, createdAt: true } });
     if (!user) throw unauthorized('Invalid token');
     if (!user.isActive) throw forbidden('Account is disabled');

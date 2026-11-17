@@ -42,9 +42,12 @@ export function expiresSoon(accessToken: string, now = Date.now(), marginMs = 30
   }
 }
 
+const PUBLIC_AUTH = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+export const usesAccessToken = (url = '') => !PUBLIC_AUTH.some((path) => url.startsWith(path));
+
 api.interceptors.request.use(async (config) => {
   let tokens = getTokens();
-  if (tokens && !config.url?.startsWith('/auth/') && expiresSoon(tokens.accessToken)) tokens = await refreshTokens();
+  if (tokens && usesAccessToken(config.url) && expiresSoon(tokens.accessToken)) tokens = await refreshTokens();
   if (tokens) config.headers.Authorization = `Bearer ${tokens.accessToken}`;
   return config;
 });
@@ -84,7 +87,7 @@ api.interceptors.response.use(
         return api(original);
       }
     }
-    if (error.response?.status === 401 && code !== 'TOKEN_EXPIRED' && getTokens() && !original?.url?.startsWith('/auth/')) setTokens(null);
+    if (error.response?.status === 401 && code !== 'TOKEN_EXPIRED' && getTokens() && usesAccessToken(original?.url)) setTokens(null);
     return Promise.reject(error);
   },
 );

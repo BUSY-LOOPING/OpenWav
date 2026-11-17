@@ -42,6 +42,13 @@ export function createSchedulerJobs({ prisma, publishDownload, publishPlaylist, 
       return count;
     },
 
+    async pruneAnalytics() {
+      const row = await prisma.setting.findUnique({ where: { key: 'analytics.retention_days' } });
+      const cutoff = minutesAgo((row?.value ?? DEFAULT_SETTINGS['analytics.retention_days']) * 1440, now());
+      const [plays, misses] = await Promise.all([prisma.playEvent.deleteMany({ where: { playedAt: { lt: cutoff } } }), prisma.searchMiss.deleteMany({ where: { day: { lt: cutoff } } })]);
+      return plays.count + misses.count;
+    },
+
     async pruneTasks(days = 30) {
       const { count } = await prisma.downloadTask.deleteMany({ where: { status: { in: TERMINAL_TASK_STATUSES }, updatedAt: { lt: minutesAgo(days * 1440, now()) } } });
       return count;

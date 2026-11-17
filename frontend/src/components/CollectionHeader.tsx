@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Ambient } from './Ambient';
 import { Icon, Thumb } from './ui';
 
 export function CollectionHeader({
@@ -20,11 +21,11 @@ export function CollectionHeader({
         {cover.length >= 4 ? (
           <div className="grid h-full grid-cols-2">
             {cover.slice(0, 4).map((src, i) => (
-              <Thumb key={i} src={src} rounded="" className="h-full w-full" />
+              <Thumb key={i} src={src} seed={`${title}${i}`} rounded="" className="h-full w-full" />
             ))}
           </div>
         ) : (
-          <Thumb src={cover[0]} rounded="" className="h-full w-full" icon="queue_music" />
+          <Thumb src={cover[0]} seed={String(title)} rounded="" className="h-full w-full" icon="queue_music" />
         )}
       </div>
       <div className="flex min-w-0 flex-col items-center gap-3 md:items-start lg:items-center">
@@ -50,9 +51,10 @@ export function PlayButtons({ onPlay, onShuffle, disabled }: { onPlay: () => voi
   );
 }
 
-export function CollectionLayout({ header, children }: { header: ReactNode; children: ReactNode }) {
+export function CollectionLayout({ header, children, ambient }: { header: ReactNode; children: ReactNode; ambient?: string | null }) {
   return (
-    <div className="mx-auto flex max-w-[1478px] flex-col gap-4 px-4 sm:px-8 xl:flex-row xl:gap-12 xl:px-12">
+    <div className="relative isolate mx-auto flex max-w-[1478px] flex-col gap-4 px-4 sm:px-8 xl:flex-row xl:gap-12 xl:px-12">
+      <Ambient src={ambient} />
       <div className="xl:w-[380px] xl:shrink-0">{header}</div>
       <div className="min-w-0 flex-1 pb-6 xl:pt-6">{children}</div>
     </div>

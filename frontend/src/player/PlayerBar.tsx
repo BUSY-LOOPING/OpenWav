@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { EqualizerDialog } from '../components/EqualizerDialog';
 import { TrackMenu } from '../components/TrackMenu';
 import { IconButton, Thumb } from '../components/ui';
 import { formatTime } from '../lib/format';
@@ -64,6 +66,7 @@ export function PlayerBar() {
   const isPlaying = useAppSelector((s) => s.player.isPlaying);
   const open = useAppSelector((s) => s.player.nowPlayingOpen);
   const like = useToggleLike();
+  const [eqOpen, setEqOpen] = useState(false);
   if (!track) return null;
   const effectiveVolume = muted ? 0 : volume;
 
@@ -105,11 +108,13 @@ export function PlayerBar() {
             />
             <IconButton icon={effectiveVolume === 0 ? 'volume_off' : effectiveVolume < 0.5 ? 'volume_down' : 'volume_up'} label={muted ? 'Unmute' : 'Mute'} onClick={() => dispatch(toggleMute())} />
           </div>
+          <IconButton icon="equalizer" label="Equaliser" onClick={() => setEqOpen(true)} className="hidden md:inline-flex" />
           <TrackMenu track={track} className="hidden sm:inline-flex" />
           <IconButton icon={isPlaying ? 'pause' : 'play_arrow'} fill label={isPlaying ? 'Pause' : 'Play'} size={32} onClick={() => dispatch(togglePlay())} className="sm:hidden" />
           <IconButton icon="skip_next" fill label="Next" onClick={() => dispatch(next())} className="sm:hidden" />
         </div>
       </div>
+      {eqOpen && <EqualizerDialog onClose={() => setEqOpen(false)} />}
     </div>
   );
 }

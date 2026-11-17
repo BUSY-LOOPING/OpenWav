@@ -30,6 +30,8 @@ jobs:
         run: |
           docker compose up -d --build --remove-orphans
           docker compose restart nginx
+          # Bind-mounted rule and scrape files change without recreating the container
+          docker compose kill -s HUP prometheus
       - name: Smoke test
         run: |
           PUBLIC_BASE_URL=$(grep '^PUBLIC_BASE_URL=' .env | cut -d= -f2-) \

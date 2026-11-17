@@ -111,7 +111,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
   'downloads.default_format': 'mp3',
   'downloads.default_quality': '192k',
   'downloads.concurrency': 3,
+  'downloads.paused': false,
   'storage.default_user_quota_gb': 0,
+  'storage.cleanup_enabled': false,
+  'storage.cleanup_unplayed_days': 180,
+  'analytics.retention_days': 365,
+  'scraper.cache_ttl_sec': 21600,
+  'scraper.timeout_sec': 8,
+  'scraper.max_concurrency': 4,
+  'scraper.retries': 2,
   'auth.registration_enabled': true,
   'ratelimit.global_per_minute': 300,
   'ratelimit.auth_per_15min': 20,
@@ -168,6 +176,21 @@ export function isPlaylistUrl(url) {
 }
 
 export const CANCEL_CHANNEL = 'download:cancel';
+export const YTDLP_UPDATE_CHANNEL = 'ytdlp:update';
+export const YTDLP_STATUS_KEY = 'ytdlp:status';
+export const SCRAPER_CONFIG_KEY = 'scraper:config';
+
+export const scraperConfig = (s) => ({
+  cacheTtlSec: s['scraper.cache_ttl_sec'],
+  timeoutSec: s['scraper.timeout_sec'],
+  maxConcurrency: s['scraper.max_concurrency'],
+  retries: s['scraper.retries'],
+});
+
+export function cappedQuality(requested, max) {
+  if (!max || !AUDIO_QUALITIES.includes(max)) return requested;
+  return AUDIO_QUALITIES.indexOf(requested) > AUDIO_QUALITIES.indexOf(max) ? max : requested;
+}
 
 export function retryDelayMs(retryCount) {
   return Math.min(30_000 * 2 ** retryCount, 15 * 60_000);

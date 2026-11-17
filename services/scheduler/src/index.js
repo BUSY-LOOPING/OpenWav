@@ -44,6 +44,7 @@ const schedule = {
   enrichArtists: '*/5 * * * *',
   pruneTokens: '17 3 * * *',
   pruneTasks: '43 3 * * *',
+  pruneAnalytics: '53 3 * * *',
 };
 
 for (const [name, expression] of Object.entries(schedule)) {

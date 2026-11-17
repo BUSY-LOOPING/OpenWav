@@ -49,6 +49,17 @@ describe('scheduler jobs', () => {
     expect((await prisma.downloadTask.findUnique({ where: { id: fresh.id } })).status).toBe('downloading');
   });
 
+  it('prunes play events and missed searches past the analytics retention', async () => {
+    const u = await prisma.user.create({ data: { username: 'listener', email: 'l@t.io', passwordHash: 'x' } });
+    const m = await prisma.media.create({ data: { title: 'T', url: 'https://youtu.be/t', status: 'completed' } });
+    await prisma.setting.create({ data: { key: 'analytics.retention_days', value: 10 } });
+    await prisma.playEvent.createMany({ data: [{ userId: u.id, mediaId: m.id, playedAt: ago(11 * 1440) }, { userId: u.id, mediaId: m.id }] });
+    await prisma.searchMiss.createMany({ data: [{ term: 'old', day: ago(20 * 1440) }, { term: 'new', day: new Date() }] });
+    expect(await jobs.pruneAnalytics()).toBe(2);
+    expect(await prisma.playEvent.count()).toBe(1);
+    expect((await prisma.searchMiss.findMany()).map((r) => r.term)).toEqual(['new']);
+  });
+
   it('prunes old terminal tasks only', async () => {
     const old = await prisma.downloadTask.create({ data: { url: 'https://youtu.be/a', status: 'failed' } });
     const active = await prisma.downloadTask.create({ data: { url: 'https://youtu.be/b', status: 'queued' } });

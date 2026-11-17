@@ -2,8 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { Button, Icon, inputClass } from '../components/ui';
-import { errorMessage } from '../lib/api';
-import { usePreferences, useUpdatePreferences, useUpdateProfile } from '../lib/queries';
+import { errorMessage, send } from '../lib/api';
+import { SessionList } from '../components/SessionList';
+import type { Session } from '../lib/types';
+import { useMySessions, usePreferences, useUpdatePreferences, useUpdateProfile } from '../lib/queries';
 import { PASSWORD_RULE } from './Auth';
 import { setUser } from '../store/auth';
 import { useAppDispatch, useAppSelector } from '../store';
@@ -14,6 +16,24 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       <h2 className="mb-4 text-lg font-bold">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function Devices() {
+  const sessions = useMySessions();
+  async function revoke(s: Session) {
+    try {
+      await send('delete', `/auth/sessions/${s.id}`);
+      toast(`Signed out ${s.device}`);
+      sessions.refetch();
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  }
+  return (
+    <Panel title="Your devices">
+      <SessionList sessions={sessions.data} loading={sessions.isLoading} onRevoke={revoke} />
+    </Panel>
   );
 }
 
@@ -92,6 +112,7 @@ export default function SettingsPage() {
           </select>
         </label>
       </Panel>
+      <Devices />
       {user?.role === 'admin' && (
         <Link to="/admin" className="mb-8 flex items-center gap-3 rounded-xl bg-surface p-4 hover:bg-white/10">
           <Icon name="admin_panel_settings" /> Admin dashboard

@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
+import { Ambient } from '../components/Ambient';
 import { CollectionHeader, PlayButtons } from '../components/CollectionHeader';
 import { TrackRow, TrackRowSkeleton } from '../components/TrackRow';
 import { Status } from '../components/ui';
@@ -18,7 +19,8 @@ export default function Album() {
   const total = album.tracks.reduce((sum, t) => sum + (t.durationSec ?? 0), 0);
 
   return (
-    <div className="mx-auto flex max-w-[1478px] flex-col gap-4 px-4 sm:px-8 xl:flex-row xl:gap-12 xl:px-12">
+    <div className="relative isolate mx-auto flex max-w-[1478px] flex-col gap-4 px-4 sm:px-8 xl:flex-row xl:gap-12 xl:px-12">
+      <Ambient src={album.coverUrl} />
       <div className="xl:w-[380px] xl:shrink-0">
         <CollectionHeader
           cover={[album.coverUrl]}

@@ -6,13 +6,18 @@ import { api } from '../../lib/api';
 
 const LINKS = [
   { to: '/admin', label: 'Dashboard', icon: 'monitoring', end: true },
+  { to: '/admin/analytics', label: 'Analytics', icon: 'insights' },
   { to: '/admin/users', label: 'Users', icon: 'group' },
   { to: '/admin/downloads', label: 'Downloads', icon: 'download' },
+  { to: '/admin/jobs', label: 'Jobs & queues', icon: 'account_tree' },
   { to: '/admin/media', label: 'Media', icon: 'library_music' },
+  { to: '/admin/storage', label: 'Storage', icon: 'hard_drive' },
   { to: '/admin/discovery', label: 'Auto-discovery', icon: 'travel_explore' },
   { to: '/admin/recommender', label: 'Recommender', icon: 'model_training' },
+  { to: '/admin/scraper', label: 'Scraper', icon: 'travel_explore' },
   { to: '/admin/traces', label: 'Traces', icon: 'timeline' },
   { to: '/admin/logs', label: 'Logs', icon: 'article' },
+  { to: '/admin/audit', label: 'Audit log', icon: 'policy' },
   { to: '/admin/settings', label: 'Settings', icon: 'tune' },
 ];
 

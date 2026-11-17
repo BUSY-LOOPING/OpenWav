@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CollectionHeader, CollectionLayout, PlayButtons } from '../components/CollectionHeader';
 import { Dialog } from '../components/Dialog';
 import { Menu } from '../components/Menu';
@@ -9,7 +9,7 @@ import { toast } from '../lib/toast';
 import { Button, Icon, IconButton, LoadMore, Status, inputClass } from '../components/ui';
 import { errorMessage } from '../lib/api';
 import { formatDuration } from '../lib/format';
-import { flat, loadPlaylistTracks, usePlayCollection, usePlaylist, usePlaylistItems, usePlaylistMutations } from '../lib/queries';
+import { flat, loadPlaylistTracks, usePlayCollection, usePlaylist, usePlaylistItems, usePlaylistMutations, type PlaylistSort } from '../lib/queries';
 import type { PendingTrack, PlaylistDetail, PlaylistImport, PlaylistTrack, Task, YoutubeResult } from '../lib/types';
 import { hydrated, videoIdOf } from '../store/downloads';
 import { useAppDispatch } from '../store';
@@ -60,6 +60,14 @@ function EditDialog({ playlist, onClose }: { playlist: PlaylistDetail; onClose: 
   );
 }
 
+const SORTS: { value: PlaylistSort; label: string }[] = [
+  { value: 'recent', label: 'Recently added' },
+  { value: 'oldest', label: 'Oldest added' },
+  { value: 'title', label: 'Title A–Z' },
+  { value: 'title_desc', label: 'Title Z–A' },
+  { value: 'position', label: 'Custom order' },
+];
+
 const REASON: Record<string, string> = { daily_limit: 'Daily download limit reached', storage_limit: 'Storage limit reached' };
 
 const asResult = (p: PendingTrack): YoutubeResult => ({
@@ -89,22 +97,28 @@ export default function Playlist() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const [params, setParams] = useSearchParams();
+  const sort = (SORTS.find((s) => s.value === params.get('sort'))?.value ?? 'recent') as PlaylistSort;
   const { data: playlist, isLoading, isError } = usePlaylist(id);
-  const items = usePlaylistItems(id, !!playlist?.import?.running);
+  const importing = !!playlist?.import?.running;
+  const items = usePlaylistItems(id, importing, sort);
+  const pendingItems = usePlaylistItems(id, importing, 'position', true, sort !== 'position' && !!playlist?.import);
   const mutations = usePlaylistMutations(id);
   const play = usePlayCollection();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const dragged = useRef<PlaylistTrack | null>(null);
   const rows = flat(items);
+  const pendingRows = sort === 'position' ? [] : flat(pendingItems);
   const tracks = rows.flatMap((r) => (r.track ? [r.track] : []));
 
   // Entries queued after page load have no live event yet; seed them so rows show their state
   const pages = items.data;
+  const pendingPages = pendingItems.data;
   useEffect(() => {
-    const pending = (pages?.pages ?? []).flatMap((p) => p.data).flatMap((r) => (r.pending && r.pending.status !== 'failed' && r.pending.status !== 'cancelled' ? [{ ...r.pending, mediaId: null, errorMessage: null } as unknown as Task] : []));
+    const pending = [...(pages?.pages ?? []), ...(pendingPages?.pages ?? [])].flatMap((p) => p.data).flatMap((r) => (r.pending && r.pending.status !== 'failed' && r.pending.status !== 'cancelled' ? [{ ...r.pending, mediaId: null, errorMessage: null } as unknown as Task] : []));
     if (pending.length) dispatch(hydrated(pending));
-  }, [pages, dispatch]);
+  }, [pages, pendingPages, dispatch]);
 
   if (isLoading)
     return (
@@ -117,7 +131,7 @@ export default function Playlist() {
   if (isError || !playlist) return <Status icon="playlist_remove" title="This playlist isn't available" message="It may be private or deleted." />;
 
   const owner = playlist.isOwner;
-  const playAll = (shuffle: boolean) => play(loadPlaylistTracks(id), shuffle);
+  const playAll = (shuffle: boolean) => play(loadPlaylistTracks(id, sort), shuffle);
 
   function drop(target: PlaylistTrack) {
     const from = dragged.current;
@@ -146,6 +160,7 @@ export default function Playlist() {
 
   return (
     <CollectionLayout
+      ambient={playlist.coverUrls[0]}
       header={
         <CollectionHeader
           cover={playlist.coverUrls}
@@ -181,8 +196,27 @@ export default function Playlist() {
       }
     >
       {playlist.import?.running && <ImportBar job={playlist.import} />}
+      <div className="mb-2 flex justify-end px-2 sm:px-3">
+        <Menu
+          label="Sort playlist"
+          items={SORTS.map((s) => ({ label: s.label, icon: s.value === sort ? 'check' : 'sort', onSelect: () => setParams(s.value === 'recent' ? {} : { sort: s.value }, { replace: true }) }))}
+          trigger={(props) => (
+            <button type="button" {...props} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-muted hover:bg-white/10 hover:text-white">
+              <Icon name="sort" /> {SORTS.find((s) => s.value === sort)?.label}
+            </button>
+          )}
+        />
+      </div>
+      {owner && sort !== 'position' && <p className="sr-only">Switch to Custom order to drag songs into place.</p>}
       {items.isLoading && Array.from({ length: 8 }, (_, i) => <TrackRowSkeleton key={i} />)}
       {!items.isLoading && !rows.length && !playlist.import && <Status icon="queue_music" title="No songs yet" message={owner ? 'Use "Save to playlist" on any song to add it here.' : undefined} />}
+      {!!pendingRows.length && (
+        <div role="table" aria-label="Still downloading" className="mb-4 border-b border-white/10 pb-2">
+          <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted sm:px-3">Still downloading</p>
+          {pendingRows.map((row) => row.pending && <YoutubeRow key={row.id} result={asResult(row.pending)} error={row.pending.status === 'failed' || row.pending.status === 'cancelled' ? (REASON[row.pending.reason ?? ''] ?? "Couldn't download") : null} />)}
+          <LoadMore query={pendingItems} />
+        </div>
+      )}
       <div role="table" aria-label="Tracks">
         {rows.map((row) =>
           row.pending ? (
@@ -195,7 +229,7 @@ export default function Playlist() {
               index={tracks.indexOf(row.track)}
               onRemove={owner ? () => mutations.removeTrack.mutate(row.track.id) : undefined}
               drag={
-                owner
+                owner && sort === 'position'
                   ? {
                       onDragStart: () => (dragged.current = row.track),
                       onDragOver: (e) => e.preventDefault(),

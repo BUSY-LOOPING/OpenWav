@@ -31,6 +31,15 @@ import type {
   SearchType,
   Section,
   ServerMetrics,
+  Analytics,
+  AuditEntry,
+  DeadLetter,
+  QueueStatus,
+  ScraperStatus,
+  ServerHistory,
+  Session,
+  StorageReport,
+  YtdlpHealth,
   Settings,
   Task,
   TraceSummary,
@@ -70,8 +79,9 @@ export const useAlbum = (id: string) => useQuery({ queryKey: keys.album(id), que
 const IMPORT_POLL_MS = 4000;
 export const usePlaylist = (id: string) =>
   useQuery({ queryKey: keys.playlist(id), queryFn: () => get<PlaylistDetail>(`/playlists/${id}`), refetchInterval: (q) => (q.state.data?.import?.running ? IMPORT_POLL_MS : false) });
-export const usePlaylistItems = (id: string, importing: boolean) => {
-  const query = usePaged<PlaylistItem>([...keys.playlist(id), 'items'], `/playlists/${id}/items`, { limit: 50 });
+export type PlaylistSort = 'recent' | 'oldest' | 'title' | 'title_desc' | 'position';
+export const usePlaylistItems = (id: string, importing: boolean, sort: PlaylistSort = 'recent', pending = false, enabled = true) => {
+  const query = usePaged<PlaylistItem>([...keys.playlist(id), 'items'], `/playlists/${id}/items`, { limit: 50, sort, ...(pending ? { pending: true } : {}) }, enabled);
   const { refetch } = query;
   useEffect(() => {
     if (!importing) return;
@@ -124,7 +134,7 @@ export function usePlayCollection() {
     }
   };
 }
-export const loadPlaylistTracks = (id: string) => () => loadAll<PlaylistItem>(`/playlists/${id}/items`).then((items) => items.flatMap((i) => (i.track ? [i.track] : [])));
+export const loadPlaylistTracks = (id: string, sort: PlaylistSort = 'position') => () => loadAll<PlaylistItem>(`/playlists/${id}/items`, { sort }).then((items) => items.flatMap((i) => (i.track ? [i.track] : [])));
 export const loadLikedTracks = () => getPage<Track>('/library/liked', { limit: 100 }).then((p) => p.data);
 
 export const useLiked = () => usePaged<Track>(keys.library('liked'), '/library/liked');
@@ -281,6 +291,19 @@ export const useAdminTraces = (params: Record<string, unknown>, live: boolean) =
   useQuery({ queryKey: keys.admin('traces', params), queryFn: () => get<TraceSummary[]>('/admin/traces', params), refetchInterval: live ? 5000 : false, retry: false });
 export const useAdminLogs = (params: Record<string, unknown>, live: boolean) =>
   useQuery({ queryKey: keys.admin('logs', params), queryFn: () => get<LogLine[]>('/admin/logs', params), refetchInterval: live ? 3000 : false, retry: false });
+export const useAdminServerHistory = (range: string) =>
+  useQuery({ queryKey: keys.admin('server-history', range), queryFn: () => get<ServerHistory>('/admin/server/history', { range }), refetchInterval: 60_000, retry: false });
+export const useAdminQueues = () => useQuery({ queryKey: keys.admin('queues'), queryFn: () => get<QueueStatus>('/admin/queues'), refetchInterval: 5000, retry: false });
+export const useAdminDeadLetters = (enabled: boolean) =>
+  useQuery({ queryKey: keys.admin('queues', 'dead'), queryFn: () => get<DeadLetter[]>('/admin/queues/dead'), enabled, retry: false });
+export const useAdminYtdlp = () =>
+  useQuery({ queryKey: keys.admin('ytdlp'), queryFn: () => get<YtdlpHealth>('/admin/ytdlp'), refetchInterval: (q) => (q.state.data?.status?.updating ? 3000 : 60_000) });
+export const useAdminStorage = () => useQuery({ queryKey: keys.admin('storage'), queryFn: () => get<StorageReport>('/admin/storage') });
+export const useAdminAnalytics = (days: number) => useQuery({ queryKey: keys.admin('analytics', days), queryFn: () => get<Analytics>('/admin/analytics', { days }) });
+export const useAdminAudit = (params: Record<string, unknown>) => usePaged<AuditEntry>(keys.admin('audit'), '/admin/audit', { limit: 50, ...params });
+export const useAdminScraper = () => useQuery({ queryKey: keys.admin('scraper'), queryFn: () => get<ScraperStatus>('/admin/scraper'), refetchInterval: 15_000 });
+export const useUserSessions = (userId: string) => useQuery({ queryKey: keys.admin('users', userId, 'sessions'), queryFn: () => get<Session[]>(`/admin/users/${userId}/sessions`) });
+export const useMySessions = () => useQuery({ queryKey: ['me', 'sessions'], queryFn: () => get<Session[]>('/auth/sessions') });
 export const useAdminMedia = (params: Record<string, unknown>) => usePaged<Track>(keys.admin('media'), '/admin/media', params);
 
 export function useAdminAction(scope: string) {

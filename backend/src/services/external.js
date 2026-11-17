@@ -19,6 +19,15 @@ export function createScraper({ baseUrl, redis, ttlSec = 3600 }) {
       ),
     related: (videoId) =>
       cached(`scraper:related:${videoId}`, () => fetchJson(`${baseUrl}/related?videoId=${encodeURIComponent(videoId)}`, { timeoutMs: 10_000 }).then((r) => r.items)),
+    raw: async (path, params, { fresh = false } = {}) => {
+      const query = new URLSearchParams({ ...params, ...(fresh ? { fresh: '1' } : {}) });
+      const start = performance.now();
+      const res = await fetch(`${baseUrl}${path}?${query}`, { signal: AbortSignal.timeout(30_000) });
+      const body = await res.json().catch(() => null);
+      return { status: res.status, durationMs: Math.round(performance.now() - start), body };
+    },
+    stats: () => fetchJson(`${baseUrl}/stats`, { timeoutMs: 2000 }),
+    clearCache: () => fetchJson(`${baseUrl}/cache`, { method: 'DELETE', timeoutMs: 10_000 }),
     playlist: (id) => cached(`scraper:playlist:${id}`, () => fetchJson(`${baseUrl}/playlist?id=${encodeURIComponent(id)}`, { timeoutMs: 15_000 }).then((r) => r.item)),
     suggestions: (q) =>
       cached(`scraper:suggest:${q.toLowerCase().trim()}`, () => fetchJson(`${baseUrl}/suggestions?q=${encodeURIComponent(q)}`, { timeoutMs: 3000 }).then((r) => r.items)),
@@ -121,9 +130,19 @@ export function createMonitoring({ prometheusUrl, alertmanagerUrl, tempoUrl, lok
       .slice(0, limit);
   }
 
+  // One series per result row, values as [unixSec, number]
+  async function range(query, { sinceSec, step }) {
+    const end = Math.floor(Date.now() / 1000);
+    const params = new URLSearchParams({ query, start: String(end - sinceSec), end: String(end), step: String(step) });
+    const data = await fetchJson(`${prometheusUrl}/api/v1/query_range?${params}`, { timeoutMs: 8000 });
+    return (data?.data?.result ?? []).map((r) => ({ labels: r.metric, points: r.values.map(([t, v]) => [Number(t), Number.isFinite(Number(v)) ? Number(v) : null]) }));
+  }
+
   return {
     traces,
     logs,
+    range,
+    vector,
     latency: async () => {
       const [p95Ms, p99Ms, rate] = await Promise.all([quantile(0.95), quantile(0.99), errorRate()]).catch(() => [null, null, null]);
       return { p95Ms, p99Ms, errorRate: rate };

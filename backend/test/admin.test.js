@@ -69,7 +69,7 @@ describe('admin', () => {
   it('reports host metrics and refuses when Prometheus is down', async () => {
     const server = { cpu: { usage: 0.2, cores: 4, load1: 0.5 }, disks: [{ mount: '/', availBytes: 1, sizeBytes: 2 }] };
     ctx = buildApp({ monitoring: { ...ctx.external.monitoring, server: async () => server } });
-    expect((await ctx.request.get('/api/v1/admin/server').set(as(admin)).expect(200)).body.data).toEqual(server);
+    expect((await ctx.request.get('/api/v1/admin/server').set(as(admin)).expect(200)).body.data).toEqual({ ...server, coldStorageDir: null });
     expect((await ctx.request.get('/api/v1/admin/server').set(as(user))).status).toBe(403);
     ctx = buildApp({ monitoring: { ...ctx.external.monitoring, server: async () => Promise.reject(new Error('down')) } });
     expect((await ctx.request.get('/api/v1/admin/server').set(as(admin))).status).toBe(503);

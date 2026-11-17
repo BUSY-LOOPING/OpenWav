@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { badRequest, notFound, unavailable } from '../lib/errors.js';
 import { decodeCursor, encodeCursor, pageQuery, validate } from '../lib/http.js';
+import { pickTop, rankSongs, songsBeside } from '../lib/relevance.js';
 import { playlistInclude, tracksByIds } from '../lib/serializers.js';
 
 const SCOPES = ['online', 'library'];
@@ -55,13 +56,20 @@ export function searchRoutes({ prisma, auth, serialize, scraper, events, logger 
       ),
     );
     const result = Object.fromEntries(ONLINE.map((kind, i) => [kind, lists[i]]));
-    const marked = await markDownloaded([...result.songs, ...result.videos]);
-    result.songs = marked.slice(0, result.songs.length);
-    result.videos = marked.slice(result.songs.length);
-    const exactArtist = result.artists.find((a) => a.name.toLowerCase() === term.toLowerCase());
-    result.top = exactArtist ?? result.songs[0] ?? result.videos[0] ?? result.albums[0] ?? null;
+    const songs = rankSongs(term, result.songs);
+    const marked = await markDownloaded([...songs, ...result.videos]);
+    result.songs = marked.slice(0, songs.length);
+    result.videos = marked.slice(songs.length);
+    result.top = pickTop(term, result);
+    result.topSongs = songsBeside(result.top, result.songs);
     return result;
   }
+
+  const recordMiss = (term) => {
+    const t = term.toLowerCase().slice(0, 200);
+    const day = new Date(new Date().toISOString().slice(0, 10));
+    return prisma.searchMiss.upsert({ where: { term_day: { term: t, day } }, create: { term: t, day }, update: { count: { increment: 1 } } });
+  };
 
   router.get(
     '/',
@@ -82,6 +90,8 @@ export function searchRoutes({ prisma, auth, serialize, scraper, events, logger 
       const limit = req.query.limit ?? (type === 'all' ? 6 : 20);
       if (userId) events.ingest(userId, [{ type: 'search', query: term }]).catch(() => {});
       const data = scope === 'online' ? { online: await online(term, want, limit), library: null } : { online: null, library: await library(term, want, limit, userId) };
+      const found = Object.values(data.online ?? data.library).some((v) => Array.isArray(v) && v.length);
+      if (!found) await recordMiss(term).catch((err) => logger.warn({ err }, 'search miss not recorded'));
       res.json({ data });
     },
   );

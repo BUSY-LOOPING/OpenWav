@@ -24,6 +24,7 @@ x-node-env: &node-env
   ALERTMANAGER_URL: http://alertmanager:9093
   TEMPO_URL: http://tempo:3200
   LOKI_URL: http://loki:3100
+  COLD_STORAGE_DIR: ${COLD_STORAGE_DIR:-}
   OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
   CORS_ORIGINS: ${PUBLIC_BASE_URL}
   GRAFANA_URL: http://grafana:3000
